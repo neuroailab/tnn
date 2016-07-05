@@ -149,13 +149,12 @@ def _decay_params_creator(N_states):
     decay_params = {}
     for item in range(1, N_states + 1):
         decay_params[item] = tf.Variable(tf.constant(DECAY_PARAM_INITIAL))
+        tf.scalar_summary('decay_' + str(item), decay_params[item])
     return decay_params
 # convert decay parameter to decay factor for actual usage
 def to_decay_factor(decay_parameter):
     # decay_parameter is tf.Variable
-    decay_factor = tf.sigmoid(decay_parameter)
-    tf.scalar_summary('decay_' + str(item), decay_factor)
-    return decay_factor
+    return tf.sigmoid(decay_parameter)
 def add_to_out_dict(y, j, t):
     # y = output of convpoolj (aka from state j)
     # j = layer/state number
