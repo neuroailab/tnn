@@ -320,18 +320,13 @@ test_data = np.row_stack(test_data)
 test_labels = np.concatenate(test_labels)
 
 
-# In[8]:
-
-# STEP 2: PLACEHOLDERS
+# placeholders
 images = tf.placeholder(tf.float32, shape=[BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS], name='images')
 labels = tf.placeholder(tf.int64, shape=[BATCH_SIZE], name='labels')
 keep_prob = tf.placeholder(tf.float32, name = 'keep_prob') # for dropout
 
 
-# In[9]:
-
-# STEP 3: CREATE GRAPH IN ORDER
-# todo + 1 or no + 1 in next line?
+# create graph
 for t in range(longest_path + 1): # 0 = input, N_states + N_fc = last softmax layer
     for j in range(0, N_states+1): #for each layer block, 1, 2, ... N_states
         print('t', t, 'j', j)
@@ -339,8 +334,6 @@ for t in range(longest_path + 1): # 0 = input, N_states + N_fc = last softmax la
             with tf.name_scope('input_layer'):  
                 if t == 0:
                     # initialize state variables and add to state_dict
-                    # non trainable variables
-                    # todo note: we can be flexible with including 0th layer.
                     state = images # your state variable is just the image. 
                 else: # t > 0
                     # todo: need to decide if we blank the input or keep giving in images:
