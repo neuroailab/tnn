@@ -27,14 +27,14 @@ TOTAL_IMGS_HDF5 = 1290129 # todo- check if this is correct? num images supplied 
 WEIGHT_STDDEV = 0.1 # for truncated normal distribution
 BIAS_INIT = 0.1 # initialization for bias variables
 KERNEL_SIZE = 3 
-DECAY_PARAM_INITIAL = -2.197 # for self loops- p_j initializations (so actual decay parameter is initialized to ~ sigmoid(p_j) = 0.1)
+DECAY_PARAM_INITIAL = 0.0# for self loops- p_j initializations (so actual decay parameter is initialized to ~ sigmoid(p_j) = 0.1)
 KEEP_PROB= 0.5 # for dropout, during training.
-LEARNING_RATE_BASE = 0.05 # initial learning rate. (we'll use exponential decay) [0.05 in conv_img_cat.py tutorial]
+LEARNING_RATE_BASE = 0.01 # initial learning rate. (we'll use exponential decay) [0.05 in conv_img_cat.py tutorial]
 LEARNING_RATE_DECAY_FACTOR = 0.95 
 TIME_PENALTY = 1.2 # 'gamma' time penalty as # time steps passed increases
 
 # training parameters
-TRAIN_SIZE = 10000 #1000000 
+TRAIN_SIZE = 100000 #1000000
 BATCH_SIZE = 28 #64
 NUM_EPOCHS = 10 
 # validation/testing parameters
@@ -44,7 +44,7 @@ EVAL_FREQUENCY = 100 # number of steps btwn evaluations
 NUM_TEST_BATCHES = 12
 
 # tensorboard info
-SUMMARIES_DIR = './tensorboard/pilot_default' # where to write summaries
+SUMMARIES_DIR = './tensorboard/default-256_variations' # where to write summaries
 
 sess = tf.InteractiveSession()
 # out_dict: dictionary to hold state outputs (which will be concatenated or used later)
@@ -60,15 +60,15 @@ state_dict = {}
 
 # Vgg functions
 def vgg_1(input):
-    return default_convpool(input, output_shape=[112, 64], name='vgg_1')
+    return default_convpool(input, output_shape=[IMAGE_SIZE/2, 64], name='vgg_1')
 def vgg_2(input):
-    return default_convpool(input, output_shape=[56, 128], name='vgg_2')
+    return default_convpool(input, output_shape=[IMAGE_SIZE/4, 128], name='vgg_2')
 def vgg_3(input):
-    return default_convpool(input, output_shape=[28, 256], name='vgg_3')
+    return default_convpool(input, output_shape=[IMAGE_SIZE/8, 256], name='vgg_3')
 def vgg_4(input):
-    return default_convpool(input, output_shape=[14, 512], name='vgg_4')
+    return default_convpool(input, output_shape=[IMAGE_SIZE/16, 512], name='vgg_4')
 def vgg_5(input):
-    return default_convpool(input, output_shape=[7, 512], name='vgg_5')
+    return default_convpool(input, output_shape=[IMAGE_SIZE/32, 512], name='vgg_5')
 def default_fc(input, output_size, dropout, name='fc'):
     # a general fully connected layer, with dropout placeholder (specified at runtime)
     # input = flattened tf.Tesnor; output_size = integer
@@ -239,7 +239,7 @@ convpool_functs = {1: vgg_1,
                    4: vgg_4, 
                    5: vgg_5, 
                    'fc_final': fc_final}
-bypasses = [(1, 3), (2,4)] # list of tuples of bypasses (ON TOP of regular connections) 
+bypasses = [] # list of tuples of bypasses (ON TOP of regular connections)
 # N_states = N_conv
 N_states = 5 
 N_fc = 1 # includes last linear layer input to softmax
@@ -395,6 +395,7 @@ learning_rate = tf.train.exponential_decay(
       TRAIN_SIZE,          # Decay step (aka once every EPOCH)
       LEARNING_RATE_DECAY_FACTOR,                # Decay rate.
       staircase=True)
+tf.scalar_summary('learning_rate', learning_rate)
 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(total_loss)
 
 # softmax/accuracy or 1-acc = error/loss vector - collect at times N+1, N, ..., N + 1 - largest_bypass_hop for analysis
@@ -418,7 +419,7 @@ start_time = start_time_step = time.time()
 tf.initialize_all_variables().run()
 print("We've initialized!")
 
-numTrainingBatches = 15
+numTrainingBatches = 500
 for step in range(numTrainingBatches):
     batchd = train_data.getNextBatch()
     batch_data = batchd['data']
@@ -435,7 +436,7 @@ for step in range(numTrainingBatches):
         confidences_dict[t].append(np.mean(np.amax(predictions, 1), axis=0)) # see how 'prob' of top prediction varies with time/batch (averaged over batch)
         losses = results['loss_' + str(t)] # batch_size array
         loss_dict[t].append(losses)
-    print('Step %d total_loss: %.6f, learning rate: %.6f' % (step, results['tot_loss'], results['lr']))
+    print('Step %d total_loss: %.6f, err_rate: %.6f, lr: %.6f' % (step, results['tot_loss'], err_rate, results['lr'])) # last error rate
     elapsed_time_step = time.time() - start_time_step
     start_time_step = time.time()
     print('step %d, %.1f ms' % (step, 1000 * elapsed_time_step))
