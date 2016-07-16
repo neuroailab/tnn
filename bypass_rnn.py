@@ -28,7 +28,7 @@ TOTAL_IMGS_HDF5 = 1290129 # todo- check if this is correct? num images supplied 
 # BIAS_INIT = 0.1 # initialization for bias variables
 # KERNEL_SIZE = 3
 # DECAY_PARAM_INITIAL = -2.197 # for self loops- p_j initializations (so actual decay parameter is initialized to ~ sigmoid(p_j) = 0.1)
-KEEP_PROB= 0.5 # for dropout, during training. (todo - implement dropout)
+KEEP_PROB= 0.5 # for dropout, during training. # todo - implement dropout
 LEARNING_RATE_BASE = 0.05 # initial learning rate. (we'll use exponential decay) [0.05 in conv_img_cat.py tutorial]
 LEARNING_RATE_DECAY_FACTOR = 0.95
 TIME_PENALTY = 1.2 # 'gamma' time penalty as # time steps passed increases
@@ -44,7 +44,7 @@ EVAL_FREQUENCY = 100 # number of steps btwn evaluations
 NUM_TEST_BATCHES = 12
 # tensorboard info
 SUMMARIES_DIR = './tensorboard/bypass_rnn_'+ str(VERSION_NUMBER) # where to write summaries
-
+SAVE_FREQ = 250 # save variables every SAVE_FREQ steps
 
 def _adjacency_list_creator(bypasses, N_cells):
     # bypasses = list of tuples of bypasses
@@ -62,6 +62,7 @@ def _adjacency_list_creator(bypasses, N_cells):
 
 def get_shortest_path_length(adjacency_list): # using breadth first search
     # note that our adj_list is 'reversed'. So we search (equivalently) for shortest path from state N_state -> 1
+    # lists to keep track of distTo and prev
     N_cells = len(adjacency_list)
     distTo = [1000000] * (N_cells+1) # adj_list + 1 so we index with 1, 2, 3.. N_cells
     prev = [-1] * (N_cells+1) # holds state that feeds into your state (prev in path)
@@ -77,11 +78,13 @@ def get_shortest_path_length(adjacency_list): # using breadth first search
     shortest_path_length_conv = distTo[0]
     shortest_path = shortest_path_length_conv + 1 # add 1 for last linear/softmax layer that's always included
     return shortest_path
+
+# to use with evaluation: get giant array of all your predictions and compare with eval_labels
 def error_rate(predictions, labels):
     # returns batch error rate (# correct/ batch size). 100% - (top-1 accuracy)%
     return 100.0 - (100.0 * np.sum(np.argmax(predictions, 1) == labels) / predictions.shape[0])
 
-# run tensorflow with dictionary
+# run tensorflow with dictionary. NOTE: Inspired by Styrke's github: https://github.com/tensorflow/tensorflow/issues/1941
 def tf_run_dict(session, fetches, feed_dict):
     # session = your tf session, feed_dict = feed_dict as usual
     # fetches = dictionary {'name1': fetch1, 'name2': fetch2}
@@ -128,7 +131,7 @@ def _make_curr_in(input, prev_out, adj_list): # for a given time step
     # the input to layer 1 (j=1) is solely from input
     curr_in[1] = input
     N_cells = len(prev_out)
-    for j in range(2, N_cells + 1): # 2, 3, ... N_cells
+    for j in range(2, N_cells + 1): # 2, 3, ... N_cells (corresponding with adjacency_list keys 1, .. N_cells)
         # check if desired spatial size is 4d
         incoming_size = layer_sizes[j-1]['output']# the proper incoming size as taken from prev layer's output
         if len(incoming_size) == 4: # to concatenate in channel dimension and do pooling and all
@@ -171,13 +174,15 @@ def _make_inputs(static_in, T, effect=None):
     """ effect=None: returns list of T copies of static_in
     effect=exponential: returns list of T versions of static_in, with an applied exponential mask
     """
-    if effect==None:
+    if effect == None:
         input_list = [static_in for t in range(T)]
     else: # todo - can add other effects.
         pass
     return input_list
 
-# Graph Structure.
+# Graph structure
+# sizes = [batch size, spatial, spatial, depth(num_channels)]
+# Todo - for non-default values (strides, filter sizes, etc.) make nicer input format
 layer_sizes = { 0: {'state': [BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS], 'output':  [BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS]}, # input
                 1: {'state': [BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, 32], 'output': [BATCH_SIZE, IMAGE_SIZE/2, IMAGE_SIZE/2, 32]},
                 2: {'state': [BATCH_SIZE, IMAGE_SIZE/2, IMAGE_SIZE/2, 64], 'output': [BATCH_SIZE, IMAGE_SIZE/4, IMAGE_SIZE/4, 64]},
@@ -198,6 +203,7 @@ longest_path = N_cells + 1 # includes final linear-softmax layer.
 bypasses = [] # bypasses: list of tuples (from, to)
 adj_list = _adjacency_list_creator(bypasses, N_cells) # dictionary {TO state #: FROM [states, #, ...]} defined by bypasses
 shortest_path = get_shortest_path_length(adjacency_list=adj_list) # which time point outputs start to matter [accounts for linsoftmax layer]
+
 cells_dict = _make_cells_dict(layers)
 
 
@@ -213,7 +219,7 @@ def _model(cells, inputs, label, initial_states=None):
     """
     # losses_dict {time#: loss output at that time}
     losses_dict = {}
-    # predictions_dict {time#: softmax predictions}
+    # predictions_dict {time#: softmax predictions} # TODO - UNLESS WE ONLY CARE ABOUT TOP 1, THEN LET'S SAVE SOME MEMORY
     predictions_dict = {}
     prev_out, curr_states = _graph_initials(inputs[0], len(cells)) # len(cells) = N_cells
     if not initial_states == None:
@@ -226,6 +232,7 @@ def _model(cells, inputs, label, initial_states=None):
         print('--------------t = ', t, '-----------------')
         # print('current vars: ', [x.name for x in tf.trainable_variables()]) # (ensure vars reused)
         if t == 1:
+            # do your rnn stuff here
             for cell_num, cell in cells.iteritems():  # run through network
                 # need to set unique variable scopes for each cell to use variable sharing correctly
                 with tf.variable_scope(layers[cell_num][0].__name__ + '_' + str(cell_num)) as varscope: #op name
@@ -234,7 +241,7 @@ def _model(cells, inputs, label, initial_states=None):
                                                            initial_state=curr_states[cell_num],
                                                            dtype=tf.float32)
                     next_out[cell_num] = out[0] # out is a list, so we extract its element
-            with tf.variable_scope('final') as varscope: # just to initialize vars once.
+            with tf.variable_scope('final') as varscope:# just to initialize vars once.
                 logits = final_fc(input=curr_in[cell_num + 1])  # of input to softmax
         else:  # t > 1
             # do your rnn stuff here
@@ -254,7 +261,6 @@ def _model(cells, inputs, label, initial_states=None):
                 with tf.variable_scope('loss') as varscope:
                     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits, label),
                                           name='xentropy_loss_t' + str(t))
-                    tf.scalar_summary('loss_t' + str(t), loss)
                     losses_dict['loss_' + str(t)] = loss  # add to losses_dict so we can compare raw losses wrt time
                     loss_term = tf.mul(loss, math.pow(TIME_PENALTY,
                                                       t - shortest_path))  # TODO can modify (ex: multiply by a factor gamma^t) before adding to total loss
@@ -268,7 +274,6 @@ def _model(cells, inputs, label, initial_states=None):
     if T < shortest_path:
         raise ValueError('T < shortest path through graph. No good.')
     total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
-    tf.scalar_summary('total_loss', total_loss)
     losses_dict['tot_loss'] = total_loss
     fetch_dict = {} # 'concatenate' predictions_dict and losses_dict
     fetch_dict.update(losses_dict)
@@ -325,6 +330,7 @@ def get_data():
 
     return train_data, validation_data, validation_labels, test_data, test_labels
 
+
 # todo - add other stuff to fetch_dict [decay_param?]
 def run_and_process(sess):
     # placeholders
@@ -335,25 +341,19 @@ def run_and_process(sess):
 
     # training step (optimizer)
     batch_count = tf.Variable(0, trainable=False)  # to count steps (inc. once per batch) aka the global_step
-    tf.scalar_summary('batch_count', batch_count)
     learning_rate = tf.train.exponential_decay(
         LEARNING_RATE_BASE,  # Base learning rate.
         batch_count * BATCH_SIZE,  # Current index into the dataset.
         TRAIN_SIZE,  # Decay step (aka once every EPOCH)
         LEARNING_RATE_DECAY_FACTOR,  # Decay rate.
         staircase=True)
-    tf.scalar_summary('learning_rate', learning_rate)
     # optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(fetch_dict['tot_loss'])  # TODO - can also use MOMENTUM.
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
     gvs = optimizer.compute_gradients(fetch_dict['tot_loss']) # .minimize = compute gradients and apply them.
     capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]    # gradient clipping.
     optimizer = optimizer.apply_gradients(capped_gvs, global_step = batch_count) # returns an Operation to run
 
-    # summary stuff
-    merged_summaries = tf.merge_all_summaries()
-    train_writer = tf.train.SummaryWriter(SUMMARIES_DIR, sess.graph)
-
-    fetch_dict.update({'opt': optimizer, 'summary': merged_summaries, 'lr': learning_rate})
+    fetch_dict.update({'opt': optimizer, 'lr': learning_rate})
     # collect info at times shortest_path, shortest_path + 1, ... longest_path = N_cells + 1
     # errors_dict {time#: error at that time} ... changes for each batch input, of course
     errors_dict = {}  # dictionary of list of errors [by batch] for different time steps.
@@ -373,6 +373,7 @@ def run_and_process(sess):
     init = tf.initialize_all_variables()  # initialize variables
     sess.run(init)
     print("We've initialized!")
+    #numTrainingBatches = 500  # temp- for testing purposes
     train_data, validation_data, validation_labels, test_data, test_labels = get_data()
     print('WE ARE GOING TO RUN FOR: ', int(NUM_EPOCHS * TRAIN_SIZE) // BATCH_SIZE, 'ITERATIONS')
     for step in xrange(int(NUM_EPOCHS * TRAIN_SIZE) // BATCH_SIZE): # num training batches = total number of imgs (including epoch repeats)/batch size
@@ -382,8 +383,7 @@ def run_and_process(sess):
         batch_labels = batchd['labels']
         feed_dict = {img_ph: batch_data, labels: batch_labels}  # TODO!! , keep_prob: KEEP_PROB}
         results = tf_run_dict(sess, fetch_dict,
-                              feed_dict)  # results as a dictionary- {'summary': summary, 'lr': lr, etc..}
-        # todo - just trusting copy paste for now. please take a look later.
+                              feed_dict)  # results as a dictionary- {'loss_2': loss, 'lr': lr, etc..}
         for t in range(shortest_path, max(min(T + 1, longest_path + 1), T + 1)):  # extract loss/predictions per time
             predictions = results['pred_' + str(t)]  # batch size x num_labels array
             err_rate = error_rate(predictions, batch_labels)  # batch error rate
@@ -397,7 +397,6 @@ def run_and_process(sess):
         elapsed_time_step = time.time() - start_time_step
         start_time_step = time.time()
         print('step %d, %.1f ms' % (step, 1000 * elapsed_time_step))
-        train_writer.add_summary(results['summary'], step)  # write info to tensorboard
         if step % EVAL_FREQUENCY == 0:
             elapsed_time = time.time() - start_time  # todo - reinstate to eval instead of train, after we get things going
             start_time = time.time()
@@ -409,7 +408,7 @@ def run_and_process(sess):
             sys.stdout.flush()  # flush the stdout buffer
         if step % 250 == 0: # how often to SAVE OUR VARIABLES
             # Append the step number to the checkpoint name:
-            saver.save(sess, save_path='bypass_rnn03_saver', global_step=batch_count)
+            saver.save(sess, save_path='bypass_rnn10_saver', global_step=batch_count)
 
 
 #run_and_process(tf.Session(config=tf.ConfigProto(log_device_placement=True))) # check which gpus/cpus used.
