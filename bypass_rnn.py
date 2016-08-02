@@ -37,8 +37,9 @@ TBOARD = False # creates graph (doesn't save activation info) if True.
 VERSION_NUMBER = '28' # for storing tensorboard summaries
 SUMMARIES_DIR = './tensorboard/bypass_rnn_'+ str(VERSION_NUMBER) + '_weight_decay' # where to put tboard graph
 
-# GPU params
+# Processing params
 GPU_MEMORY_FRACTION=0.4
+NUM_PREPROCESS_THREADS = 4
 
 # Training parameters
 TRAIN_SIZE = 1000000 #1000000
@@ -652,8 +653,12 @@ def run_and_process(sess):
     coord = tf.train.Coordinator()
     tf.train.start_queue_runners(sess=sess, coord=coord) # start queue runners
     try:
-        thread = threading.Thread(target=data.load_and_enqueue, args=(sess, enqueue_op, coord))
-        thread.start()
+        threads = []
+        for i in range(NUM_PREPROCESS_THREADS):
+            thread = threading.Thread(target=data.load_and_enqueue, args=(sess, enqueue_op, coord))
+            thread.start()
+            thread.daemon = True # thread closes when parent quits
+            threads.append(thread)
 
         # num training batches = total number of imgs (including epoch repeats)/batch size
         for step in xrange(start_step, int(NUM_EPOCHS * TRAIN_SIZE) // BATCH_SIZE + 1):  # start with step=START_STEP or 1.
@@ -709,8 +714,7 @@ def run_and_process(sess):
     except Exception as e:  # pylint: disable=broad-except
         coord.request_stop(e)
     coord.request_stop()
-    # coord.join(threads)
-    coord.join([thread])
+    coord.join(threads, stop_grace_period_secs=10)
     sess.close()
 
 
