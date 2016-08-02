@@ -656,8 +656,8 @@ def run_and_process(sess):
         threads = []
         for i in range(NUM_PREPROCESS_THREADS):
             thread = threading.Thread(target=data.load_and_enqueue, args=(sess, enqueue_op, coord))
-            thread.start()
             thread.daemon = True # thread closes when parent quits
+            thread.start()
             threads.append(thread)
 
         # num training batches = total number of imgs (including epoch repeats)/batch size
@@ -665,7 +665,8 @@ def run_and_process(sess):
 
             if not KEEP_PROB is None:
                 feed_dict = {keep_prob: KEEP_PROB}  # if dropout implemented
-
+            else:
+                feed_dict = {}
             results = sess.run(fetch_dict, feed_dict)  # results as a dictionary- {'loss_2': loss, 'lr': lr, etc..}
 
             for t in range(shortest_path, T + 1):  # extract loss/predictions per time
