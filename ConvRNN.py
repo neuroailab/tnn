@@ -8,8 +8,10 @@ from tensorflow.python.ops import array_ops
 """ RNNCell Types included:
  @@ConvRNNCell
  @@ConvPoolRNNCell
+ @@MultiConvPoolRNNCell
  @@FcRNNCell
  """
+
 # Default graph parameters. Can specify different values when creating RNNCells.
 DEFAULT_INITIALIZER = 'xavier' # or 'trunc_norm'
 WEIGHT_STDDEV = 0.1  # for truncated normal distribution (if selected)
@@ -42,12 +44,7 @@ def _bias(shape, bias_init=BIAS_INIT):  # bias variable for convolution
 
 def _conv(input, weights, bias, conv_stride=CONV_STRIDE, name='conv'):
     # conv with stride as specified (kernel size determined by weights) + bias. (No ReLU)
-    # If conv_stride > 1 we use 'VALID' padding instead of 'SAME'
-    if conv_stride > 1:
-        padding = 'VALID'
-    else:
-        padding = 'SAME'
-    conv2d = tf.nn.conv2d(input, weights, strides=[1, conv_stride, conv_stride, 1], padding=padding)
+    conv2d = tf.nn.conv2d(input, weights, strides=[1, conv_stride, conv_stride, 1], padding='SAME')
     conv = tf.nn.bias_add(conv2d, bias, name=name)
     return conv
 
@@ -83,6 +80,7 @@ class ConvPoolRNNCell(RNNCell):
     def __init__(self, state_size, output_size,
                  conv_size=CONV_SIZE, conv_stride=CONV_STRIDE,
                  weight_init=DEFAULT_INITIALIZER, weight_stddev=WEIGHT_STDDEV,
+                 weight_decay=None,
                  bias_init=BIAS_INIT,
                  pool_size=POOL_SIZE,
                  decay_param_init=DECAY_PARAM_INITIAL,
@@ -96,6 +94,7 @@ class ConvPoolRNNCell(RNNCell):
         self.conv_stride = conv_stride
         self.weight_init = weight_init
         self.weight_stddev = weight_stddev
+        self.weight_decay = weight_decay
         self.bias_init = bias_init
         self.pool_size = pool_size
         self.decay_param_init = decay_param_init
@@ -116,16 +115,19 @@ class ConvPoolRNNCell(RNNCell):
             weights_shape = [self.conv_size, self.conv_size, input_shape[3], output_shape[3]]
             # conv
             weights = _weights(weights_shape, init=self.weight_init, stddev=self.weight_stddev)
+            if self.weight_decay is not None:
+                weight_decay = tf.mul(tf.nn.l2_loss(weights), self.weight_decay, name='weight_loss')
+                tf.add_to_collection('losses', weight_decay)
             bias = _bias([output_shape[3]], bias_init=self.bias_init)
             conv = _conv(inputs, weights, bias, conv_stride=self.conv_stride)  # conv of inputs
             if self.memory:
                 decay_factor = to_decay_factor(_decay_param(initial=self.decay_param_init))
+                new_state = tf.mul(state, decay_factor) + conv  # new state = decay(old state) + conv(inputs)
             else: # no 'self-loop' with state
-                decay_factor = 0
-            new_state = tf.mul(state, decay_factor) + conv  # new state = decay(old state) + conv(inputs)
+                new_state = conv  # new state = 0*(old state) + conv(inputs)
             relu = _relu(new_state)  # activation function
-            # pool
-            pool = maxpool(input=relu, in_spatial=input_shape[1],
+            # pool. Stride depends on input spatial (of conv's output) and desired out_spatial
+            pool = maxpool(input=relu, in_spatial=conv.get_shape().as_list()[1],
                            out_spatial=output_shape[1], kernel_size=self.pool_size)
         return pool, new_state
 
@@ -135,7 +137,10 @@ class ConvPoolRNNCell(RNNCell):
 
     @property
     def output_size(self):
-        return self._output_size  # [spatial, num_channels]
+        return self._output_size
+
+
+
 
 
 class ConvRNNCell(RNNCell):
@@ -144,7 +149,7 @@ class ConvRNNCell(RNNCell):
 
     def __init__(self, state_size,
                  conv_size=CONV_SIZE, conv_stride=CONV_STRIDE,
-                 weight_init=DEFAULT_INITIALIZER, weight_stddev=WEIGHT_STDDEV,
+                 weight_init=DEFAULT_INITIALIZER, weight_stddev=WEIGHT_STDDEV, weight_decay=None,
                  bias_init=BIAS_INIT,
                  decay_param_init=DECAY_PARAM_INITIAL,
                  memory=True):
@@ -157,6 +162,7 @@ class ConvRNNCell(RNNCell):
         self.conv_stride = conv_stride
         self.weight_init = weight_init
         self.weight_stddev = weight_stddev
+        self.weight_decay = weight_decay
         self.bias_init = bias_init
         self.decay_param_init = decay_param_init
         self.memory = memory
@@ -178,13 +184,16 @@ class ConvRNNCell(RNNCell):
             weights_shape = [self.conv_size, self.conv_size, input_shape[3], output_shape[3]]
             # conv
             weights = _weights(weights_shape, init=self.weight_init, stddev=self.weight_stddev)
+            if self.weight_decay is not None:
+                weight_decay = tf.mul(tf.nn.l2_loss(weights), self.weight_decay, name='weight_loss')
+                tf.add_to_collection('losses', weight_decay)
             bias = _bias([output_shape[3]], bias_init=self.bias_init)
             conv = _conv(inputs, weights, bias, conv_stride=self.conv_stride)  # conv of inputs
             if self.memory:
                 decay_factor = to_decay_factor(_decay_param(initial=self.decay_param_init))
+                new_state = tf.mul(state, decay_factor) + conv  # new state = decay(old state) + conv(inputs)
             else:  # no 'self-loop' with state
-                decay_factor = 0
-            new_state = tf.mul(state, decay_factor) + conv  # new state = decay(old state) + conv(inputs)
+                new_state = conv  # new state = 0*(old state) + conv(inputs)
             relu = _relu(new_state)  # activation function
         return relu, new_state
 
@@ -194,7 +203,77 @@ class ConvRNNCell(RNNCell):
 
     @property
     def output_size(self):
-        return self._output_size  # [spatial, num_channels]
+        return self._output_size
+
+class MultiConvPoolRNNCell(RNNCell):
+    """ Can have stacks of N multiple Convolutions before Pooling.
+    Each convolution outputs the same size activation volume
+    The state is computed after all convolutions (& prev state decay); right before ReLU."""""
+    def __init__(self, state_size, output_size,
+                 num_conv = 1, # number of convolution layers to stack
+                 conv_size=CONV_SIZE, conv_stride=CONV_STRIDE,
+                 weight_init=DEFAULT_INITIALIZER, weight_stddev=WEIGHT_STDDEV,
+                 bias_init=BIAS_INIT,
+                 pool_size=POOL_SIZE,
+                 decay_param_init=DECAY_PARAM_INITIAL,
+                 memory=True):
+        """ state_size = same size as conv of input
+        memory=True to use decay factor in state transition. If False, state is not remembered"""
+        # output_size,state_size - [BATCHSIZE, SPATIAL, SPATIAL, NUMCHANNELS]
+        self._state_size = state_size  # used for zero_state. size of conv(input)
+        self._output_size = output_size
+        self.num_conv = num_conv
+        self.conv_size = conv_size
+        self.conv_stride = conv_stride
+        self.weight_init = weight_init
+        self.weight_stddev = weight_stddev
+        self.bias_init = bias_init
+        self.pool_size = pool_size
+        self.decay_param_init = decay_param_init
+        self.memory = memory
+
+    def zero_state(self, batch_size, dtype):  # unfortunately we need to have the same method signature
+        """Return zero-filled state tensor"""
+        zeros = tf.zeros(self._state_size, dtype=tf.float32, name='zero_state')
+        return zeros
+
+    def __call__(self, inputs, state, scope=None):
+        with tf.variable_scope(scope or type(self).__name__):
+            # output_shape = [BATCHSIZE, SPATIAL, SPATIAL, NUMCHANNELS] determine pooling stride and # conv filters
+            # get shape as a list [#batches, width, height, depth/channels]
+            curr_in = inputs # for for loop
+            output_shape = self._output_size
+            for i in range(self.num_conv):
+                with tf.variable_scope('conv'+str(i)): # to ensure proper variable reusing
+                    input_shape = curr_in.get_shape().as_list()
+                    # weights_shape = [spatial, spatial, num_input_channels, num_output_channels]
+                    weights_shape = [self.conv_size, self.conv_size, input_shape[3], output_shape[3]]
+                    # conv
+                    weights = _weights(weights_shape, init=self.weight_init, stddev=self.weight_stddev)
+                    bias = _bias([output_shape[3]], bias_init=self.bias_init)
+                    curr_in = _conv(curr_in, weights, bias, conv_stride=self.conv_stride)  # conv of inputs
+            conv = curr_in # curr_in = last output of the stack we've made.
+            if self.memory:
+                decay_factor = to_decay_factor(_decay_param(initial=self.decay_param_init))
+                new_state = tf.mul(state, decay_factor) + conv  # new state = decay(old state) + conv(inputs)
+            else: # no 'self-loop' with state
+                new_state = conv  # new state = 0*(old state) + conv(inputs)
+            relu = _relu(new_state)  # activation function
+            # pool. Stride depends on input spatial (of conv's output) and desired out_spatial
+            pool = maxpool(input=relu, in_spatial=conv.get_shape().as_list()[1],
+                           out_spatial=output_shape[1], kernel_size=self.pool_size)
+        return pool, new_state
+
+    @property
+    def state_size(self):  # actual state size.
+        return self._state_size
+
+    @property
+    def output_size(self):
+        return self._output_size
+
+
+
 
 #### FcRNN fun #########
 # state = decay(old_state) + W(input) + b
@@ -225,6 +304,7 @@ class FcRNNCell(RNNCell):
     def __init__(self, state_size,
                  weight_init=DEFAULT_INITIALIZER, weight_stddev=WEIGHT_STDDEV,
                  bias_init=BIAS_INIT,
+                 keep_prob=None, # for dropout
                  decay_param_init=DECAY_PARAM_INITIAL,
                  memory=True):
         """state_size = same size as output. Used for zero_state creation"""
@@ -233,6 +313,7 @@ class FcRNNCell(RNNCell):
         self._output_size = state_size
         self.weight_init = weight_init
         self.weight_stddev = weight_stddev
+        self.keep_prob = keep_prob # if None, then no dropout used. Otherwise dropout used
         self.bias_init = bias_init
         self.decay_param_init = decay_param_init
         self.memory = memory
@@ -253,11 +334,16 @@ class FcRNNCell(RNNCell):
                    bias_init=self.bias_init, scope=None)
             if self.memory:
                 decay_factor = to_decay_factor(_decay_param(initial=self.decay_param_init))
+                new_state = tf.mul(state, decay_factor) + linear_  # new state = decay(old state) + linear(inputs)
             else:  # no 'self-loop' with state
-                decay_factor = 0
-            new_state = tf.mul(state, decay_factor) + linear_  # new state = decay(old state) + linear(inputs)
+                new_state = linear_  # new state = 0*(old state) + linear(inputs)
             relu = _relu(new_state)  # activation function
-
+            # dropout
+            if self.keep_prob is None:
+                print('no dropout used')
+            else:
+                relu = tf.nn.dropout(relu, self.keep_prob) # apply dropout
+                print('using dropout! keep_prob:', self.keep_prob)
         return relu, new_state
 
     @property
