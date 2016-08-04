@@ -7,7 +7,6 @@ import bypassrnn_model
 
 import bypassrnn_params as params
 import image_processing
-from imagenet_data import ImagenetData
 import math
 import numpy as np
 import time
@@ -18,41 +17,6 @@ import threading
 
 
 LOG_DEVICE_PLACEMENT = params.LOG_DEVICE_PLACEMENT #whether to log device placement
-
-def _average_gradients(tower_grads):
-    """Calculate the average gradient for each shared variable across all towers.
-    Note that this function provides a synchronization point across all towers.
-    Args:
-      tower_grads: List of lists of (gradient, variable) tuples. The outer list
-        is over individual gradients. The inner list is over the gradient
-        calculation for each tower.
-    Returns:
-       List of pairs of (gradient, variable) where the gradient has been averaged
-       across all towers.
-    """
-    average_grads = []
-    for grad_and_vars in zip(*tower_grads):
-        # Note that each grad_and_vars looks like the following:
-        #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
-        grads = []
-        for g, _ in grad_and_vars:
-            # Add 0 dimension to the gradients to represent the tower.
-            expanded_g = tf.expand_dims(g, 0)
-
-            # Append on a 'tower' dimension which we will average over below.
-            grads.append(expanded_g)
-
-        # Average over the 'tower' dimension.
-        grad = tf.concat(0, grads)
-        grad = tf.reduce_mean(grad, 0)
-
-        # Keep in mind that the Variables are redundant because they are shared
-        # across towers. So .. we will just return the first tower's pointer to
-        # the Variable.
-        v = grad_and_vars[0][1]
-        grad_and_var = (grad, v)
-        average_grads.append(grad_and_var)
-    return average_grads
 
 
 def run_train():
@@ -91,50 +55,24 @@ def run_train():
         # Get images and labels for ImageNet and split the batch across GPUs.
         assert params.BATCH_SIZE % params.NUM_GPUS == 0, (
             'Batch size must be divisible by number of GPUs')
-        split_batch_size = int(params.BATCH_SIZE / params.NUM_GPUS) # calculate batch_size/gpu
+        split_batch_size = int(params.BATCH_SIZE / params.NUM_GPUS)  # calculate batch_size/gpu
         data, enqueue_op, images_batch, labels_batch = image_processing.inputs(train=True)
         print('have obtained images and labels')
-
-        # Split the batch of images and labels for towers.
-        images_splits = tf.split(0, params.NUM_GPUS, images_batch)
-        labels_splits = tf.split(0, params.NUM_GPUS, labels_batch)
-        print('have split the images')
-
-        # Calculate the gradients for each model tower.
-        tower_grads = [] # keep track of gradients for all towers. (so we can avg later)
-        for i in xrange(params.NUM_GPUS):
-            with tf.device('/gpu:%d' % i): # Do training on GPU
-                with tf.name_scope('%s_%d' % (params.TOWER_NAME, i)) as scope:
-                    # Force all Variables to reside on the CPU.
-                    with tf.device('/cpu:0'):
-                        # Calculate the loss for one tower of the ImageNet model. This
-                        # function constructs the entire ImageNet model but shares the
-                        # variables across all towers.
-                        fetch_dict = bypassrnn_model._model(params.LAYERS, params.LAYER_SIZES, params.BYPASSES, images_splits[i], labels_splits[i],
-                                            train=True, keep_prob = params.KEEP_PROB, initial_states=None)
-                        # Note: for now, keep_prob refers to after GAP layer. Can and will probably change in definition though.
-                        # TODO- MAKE FETCH_DICT JUST BE OF PREDICTIONS.....
-                    # Reuse variables for the next tower after creating first (shared btwn all)
-                    tf.get_variable_scope().reuse_variables()
-                    # Calculate the gradients for the batch of data on this ImageNet tower.
-                    gvs = optimizer.compute_gradients(fetch_dict['tot_loss'])  # .minimize = compute gradients and apply them.
-                    # Note: Unlike prev model, we apply gradients later, after averaging all tower gradients
-                    tower_grads.append(gvs)# Keep track of the gradients across all towers.
-        print('have gotten feed_dict as you already know')
-        # calculate the mean of each gradient. Note: synchronization point across all towers.
-        print('tower grads:', tower_grads)
-        grads = _average_gradients(tower_grads)
-        if params.GRAD_CLIP:
-            capped_grads = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in grads if not grad is None]
-            # gradient clipping. Note: some gradients returned are 'None' bcuz no relation btwn that var and tot loss; so we skip those.
-            apply_grad_op = optimizer.apply_gradients(capped_grads, global_step = global_step) # returns an Operation to
-            print('Gradients clipped')
-        else:
-            apply_grad_op = optimizer.apply_gradients(grads, global_step = global_step)
-            print('Gradients not clipped')
-        print('have applied gradients')
-        fetch_dict.update({'opt': apply_grad_op, 'lr': learning_rate})
-
+        with tf.device('/gpu:%d' % 0): # preventing the scope from being CPU here!
+            fetch_dict = bypassrnn_model._model(params.LAYERS, params.LAYER_SIZES, params.BYPASSES, images_batch,
+                                            labels_batch,
+                                            train=True, keep_prob=params.KEEP_PROB, initial_states=None)
+            # Calculate the gradients for the batch of data on this ImageNet tower.
+            gvs = optimizer.compute_gradients(fetch_dict['tot_loss'])  # .minimize = compute gradients and apply them.
+            if params.GRAD_CLIP:
+                capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs if not grad is None]
+                # gradient clipping. Note: some gradients returned are 'None' bcuz no relation btwn that var and tot loss; so we skip those.
+                optimizer = optimizer.apply_gradients(capped_gvs, global_step=global_step)  # returns an Operation to run
+                print('Gradients clipped')
+            else:
+                optimizer = optimizer.apply_gradients(gvs, global_step=global_step)
+                print('Gradients not clipped')
+        fetch_dict.update({'opt': optimizer, 'lr': learning_rate})
 
         saver = tf.train.Saver(max_to_keep=params.MAX_TO_KEEP)
 
@@ -149,17 +87,13 @@ def run_train():
         sys.stdout.flush()
         # restore model from checkpoint if RESTORE_VARS==True
         if params.RESTORE_VARS:
-            if file is None:
-                raise ValueError('Please provide a file from which to load variables!')
-            # TODO: let this choose from checkpoint? At least in eval mode.
-            restorer = tf.train.Saver() # currently, restore all variables NOTE: Can change to restore select vars if needed
-            restorer.restore(sess, params.RESTORE_VAR_FILE)  # restore variables from restore_var_file to graph
+            saver.restore(sess, params.RESTORE_VAR_FILE)  # restore variables from restore_var_file to graph
             # Note: should also restore the global_step, at least in our current setup.
             print("Variables Restored!")
 
         # start queue runners (after initialization step!) to start filling up queues
         coord = tf.train.Coordinator()
-        a = tf.train.start_queue_runners(sess=sess, coord=coord)
+        tf.train.start_queue_runners(sess=sess, coord=coord)
         try:
             threads = []
             for i in range(params.NUM_PREPROCESS_THREADS):
