@@ -1,16 +1,22 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-""" use _model(...) to create a graph based on parameters specified in bypassrnn_params.py""" 
+
+""" use _model(...) to create a graph based on parameters specified in bypassrnn_params.py"""
 
 import math
-
 #from six.moves import urllib
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 
 import ConvRNN
 import bypassrnn_params as params
+
+def maxpool(input, in_spatial, out_spatial, name='pool'):
+    stride = in_spatial / out_spatial  # how much to pool by
+    pool = tf.nn.max_pool(input, ksize=[1, stride, stride, 1],  # kernel (filter) size
+                          strides=[1, stride, stride, 1], padding='SAME', name=name)
+    return pool
 
 def _graph_initials(input, layer_sizes, N_cells):
     """
@@ -31,10 +37,10 @@ def _first(bypasses, N_cells):
     first = {} # first {cell#, first t}
     curr_ind = [1]
     t = 1
-    while len(first) < N_cells: # while we have not hit every cell
+    while len(first) < N_cells: # while we have not hit every cell 
         next_ind = []
         for ind in curr_ind: # for current indices, check if already accounted for in first
-            if not ind in first:
+            if not ind in first and ind <= N_cells: # to prevent from prematurely/mistakenly adding output layer
                 first[ind] = t
                 # then add adjacency list onto next_ind
                 next_ind.extend(fwd_adj_list[ind])
@@ -110,22 +116,6 @@ def _make_curr_in(input, prev_out, adj_list, layer_sizes, last=None, next_time=N
     # add final linearsoftmax layer
     curr_in[N_cells + 1] = prev_out[N_cells] # from last layer before smax
     return curr_in
-
-
-
-# # Regular, no GAP final_fc layer
-# def final_fc(input):
-#     """flattens input (if not already flattened) and returns W(input)+b
-#     We don't include this with the other operations is because there is no activation function,
-#     unlike with regular FCs. It is purely part of a linear readout"""
-#     with tf.variable_scope('final_fc') as scope:
-#         # flatten input to [#batches, input_size]
-#         input_shape = input.get_shape().as_list()
-#         if len(input_shape) > 2: # needs flattening. assumed to have dimension 4.
-#             input_size = input_shape[1] * input_shape[2] * input_shape[3]
-#             input = tf.reshape(input, [-1, input_size])
-#         logits = ConvRNN.linear(input, output_size=params.NUM_LABELS)
-#     return logits
 
 def final_fc(input, pre_keep_prob=None):  # Note: can add dropout BEFORE Fc/softmax
     """flattens input (if not already flattened) and returns W(input)+b
@@ -212,7 +202,7 @@ def _fwd_adj_list_creator(bypasses, N_cells):
         adj.sort()  # (modifies original list.)
     return fwd_adj_list
 
-def _model(layers, layer_sizes, bypasses, images, labels, train=True, keep_prob = None, initial_states=None):  
+def _model(layers, layer_sizes, bypasses, images, labels, train=True, keep_prob = None, initial_states=None):
     """
     Creates a graph for training Should be called only once (to create a graph)
     Returns the fetch_dict that includes final predictions and losses.
@@ -307,7 +297,7 @@ def _model(layers, layer_sizes, bypasses, images, labels, train=True, keep_prob 
                     tf.add_to_collection('losses', loss_term)  # add loss to collection to be summed up
                     if (params.EVAL_INTERMED) or t == T: # not train: add intermediate t; or always add
                         predictions = tf.nn.softmax(logits)  # softmax predictions for current minibatch
-                        predictions_dict['pred_' + str(t)] = predictions  
+                        predictions_dict['pred_' + str(t)] = predictions
         # after running through network, update prev_out. (curr_states already updated)
         prev_out = next_out
 
