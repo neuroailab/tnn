@@ -1,3 +1,13 @@
+"""
+This module contains the basic building blocks of the model.  It implements all the standard ConvNet layers, but with RNN self loops.  They inherit from the RNNCell base class.
+
+RNNCell Types included:
+ @@ConvRNNCell
+ @@ConvPoolRNNCell
+ @@MultiConvPoolRNNCell
+ @@FcRNNCell
+"""
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -5,12 +15,6 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops.rnn_cell import RNNCell
 from tensorflow.python.ops import array_ops
-""" RNNCell Types included:
- @@ConvRNNCell
- @@ConvPoolRNNCell
- @@MultiConvPoolRNNCell
- @@FcRNNCell
- """
 
 # Default graph parameters. Can specify different values when creating RNNCells.
 DEFAULT_INITIALIZER = 'xavier' # or 'trunc_norm'
@@ -24,8 +28,11 @@ DECAY_PARAM_INITIAL = 0 #(actual decay factor is initialized to ~ sigmoid(p_j) =
 
 
 # other graph creation helpers
-def _weights(shape, init='xavier', stddev=WEIGHT_STDDEV):  # weights for convolution
-    """ shape = [spatial, spatial, num_input_channels, num_output_channels]
+def _weights(shape, init=DEFAULT_INITIALIZER, stddev=WEIGHT_STDDEV):
+    """
+    return TF variable that generates weights for convolution
+
+    shape = [spatial, spatial, num_input_channels, num_output_channels]
     init: 'xavier' initialization or 'trunc_norm' truncated normal distribution
     stddev: stddev of truncated normal distribution, if used.
     """

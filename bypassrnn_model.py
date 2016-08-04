@@ -1,8 +1,10 @@
+"""
+The "model" function is used to create a TF graph based on parameters specified in bypassrnn_params.py
+"""
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
-""" use _model(...) to create a graph based on parameters specified in bypassrnn_params.py"""
 
 import math
 #from six.moves import urllib
@@ -37,7 +39,7 @@ def _first(bypasses, N_cells):
     first = {} # first {cell#, first t}
     curr_ind = [1]
     t = 1
-    while len(first) < N_cells: # while we have not hit every cell 
+    while len(first) < N_cells: # while we have not hit every cell
         next_ind = []
         for ind in curr_ind: # for current indices, check if already accounted for in first
             if not ind in first and ind <= N_cells: # to prevent from prematurely/mistakenly adding output layer
