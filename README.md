@@ -1,5 +1,15 @@
 # bypass
-Bypass model implemented with Tensorflow's rnn method is in bypass_rnn.py . It relies on RNNCells defined in ConvRNN.py
+Basic overview of files:
+For quick and simple runs, with the ability to produce a Tensorboard graph visualization (but no summaries of activations), run `bypass_rnn.py`. This depends on `ConvRNN.py` for the model layers and `hdf5provider.py` and `image_processing.py` for the inputs.
+
+For a more structured and systematic implementation, such as for use on openmind, use the following set of files:
+  - `bypassrnn_params.py`: to specify model architecture, training parameters, and other configurations.
+  - `bypassrnn_model.py`: to create the model based on parameters
+  - `bypassrnn_train.py`: to run and train a model
+  - `ConvRNN.py`: provides the 'cells' to build the model layers
+  - `bypassrnn_eval.py`: to run evaluation of the model. Following Tensorflow's inception code, we can run this on a separate GPU from the `bypassrnn_train.py` run. This can be specified in the sbatch script. [IN PROGRESS] 
+  - `hdf5provider.py`: to read hdf5 files for Imagenet data
+  - `image_processing.py`: works with hdf5provider and uses Tensorflow queues to get input data. 
 
 ## Training a new model
 Specify the desired model architecture, training parameters, and file paths in `bypassrnn_params.py`. 
@@ -13,7 +23,7 @@ Parameters to double-check before each new run:
     - `NUM_GPUS = 1`: Our code is not yet ready for multi-GPU nor have we seen any substantial gain in using multi-GPUs so far.
   
   - **Saving and restoring variables, writing loss to file**
-    - `CHECKPOINT_DIR`: the directory where your variables, checkpoint file, and loss files will be saved. Thus it is also the directory read by `bypassrnn_eval.py` to periodically restore variables from the last checkpoint and run the validation set on the model. Set `SAVE_LOSS` and `SAVE_VARS` to True to output the training loss and save variable (aka model parameters) every `SAVE_VARS_FREQ` iterations. `MAX_TO_KEEP` specifies how many variable files to keep. 
+    - `CHECKPOINT_DIR`: the directory where your variables, checkpoint file, and loss files will be saved. Thus it is also the directory read by `bypassrnn_eval.py` to periodically restore variables from the last checkpoint and run the validation set on the model. Set `SAVE_LOSS` and `SAVE_VARS` to True to output the training loss and save variable (aka model parameters) every `SAVE_VARS_FREQ` iterations. **_Note_** *- `SAVE_VARS_FREQ` should be divisible by 10, since we write the loss to file every `SAVE_VARS_FREQ/10` iterations rather than on each iteration, to save I/O processing time.* `MAX_TO_KEEP` specifies how many variable files to keep. 
     - `SAVE_FILE`: specify the name of the file which the variables and loss outputs are written to. For example, 
     ```
     SAVE_FILE = './trial'
@@ -40,8 +50,14 @@ Parameters to double-check before each new run:
       2: {'state': [BATCH_SIZE, IMAGE_SIZE / 2, IMAGE_SIZE / 2, 256], 'output': [BATCH_SIZE, IMAGE_SIZE / 2, IMAGE_SIZE / 2, 256]},# conv
       ```
       The sizes, or equivalently, shapes, are in the form: [batch size, spatial, spatial, depth aka num_channels]
+      
     - `LAYERS`: Specify the type of cell for each layer based on which operations should be carried out. These cells are defined in `ConvRNN.py`. `LAYERS` is a dictionary where `LAYERS[i]` is a list, with first entry the class of the cell for layer i, and the second entry a dictionary of parameters for creating that cell. Many of these parameters, if not specified, have default values. These default values can be specified separately in `ConvRNN.py` [TODO: Maybe let those default values in `ConvRNN.py` be carried over from this parameters file.]
-      For example, for a ConvPoolRNNCell, that consists of convolution then pooling as the name implies, we can specify the convolutional kernel size (`conv_size`), the convolutional stride (`conv_stride`), the weight initialization (`weight_init`: either `'xavier'`, which is also the default, or `trunc_norm` for a truncated normal distribution), and the bias initialization (`bias_init`).  We can also specify the kernel size for pooling (`pool_size`) where the default sets `pool_size` equal to the stride of pooling, so a pool of stride 2 would have a default kernel size of stride 2. If we specify `'memory': True`, then we can initialize the initial decay parameter with `decay_param_init`. [Note that the actual decay *factor* (proportion of previous state carried over) is the *sigmoid* of the decay *parameter*.] There is also the option of using weight decay ('weight_decay'), as specified in the AlexNet implementation (Krizhevsky et. al., 2012). For more detail, see `ConvRNN.py`
+      
+      * For example, for a ConvPoolRNNCell, that consists of convolution then pooling as the name implies, we can specify the convolutional kernel size (`conv_size`), the convolutional stride (`conv_stride`), the weight initialization (`weight_init`: either `'xavier'`, which is also the default, or `trunc_norm` for a truncated normal distribution), and the bias initialization (`bias_init`).  We can also specify the kernel size for pooling (`pool_size`) where the default sets `pool_size` equal to the stride of pooling, so a pool of stride 2 would have a default kernel size of stride 2. 
+      
+      * If we specify `'memory': True`, then we can initialize the initial decay parameter with `decay_param_init`. [**_Note_**: the actual decay *factor* (proportion of previous state carried over) is the *sigmoid* of the decay *parameter*. We do so to restrict the value of the decay factor to be between 0 and 1, but allow it to be trainable if parameterized over all real numbers.] 
+      
+      * There is also the option of using weight decay ('weight_decay'), as specified in the AlexNet implementation (Krizhevsky et. al., 2012). For more detail, see `ConvRNN.py`
       
       For example:
       ```
@@ -59,7 +75,7 @@ Parameters to double-check before each new run:
                         
                 ... }
       ```
-      For FcRNNCells, which are fully connected layers, you can specify the dropout `'keep_prob'`. Currently, you would have to change the `keep_prob` value manually when switching between models for evaluation and for training, but this can be streamlined in the future. [TODO].
+      * For FcRNNCells, which are fully connected layers, you can specify the dropout `'keep_prob'`. Currently, you would have to change the `keep_prob` value manually when switching between models for evaluation and for training, but this can be streamlined in the future. [TODO].
       
       For example:
       ``` 
@@ -78,4 +94,26 @@ Parameters to double-check before each new run:
   [TODO- easy fix] Currently, the model is not robust to having a redudant list of bypasses connections, so be careful in your specifications. Also, DO NOT specify any connections between adjacent layers, for example (1,2), as these are by default included. Do not attempt to create any feedback connections either, unless you want to write your own code.
 - Other model parameters: Several parameters used in the creation of layers may include `WEIGHT_DECAY` and `FC_KEEP_PROB` (set either to `None` if not desired). 
   
-  
+
+## A quick overview of the training implementation
+  1. `bypassrnn_train.py` is executed. `run_train()` is called.
+  2. Get input data from `image_processing.py` via `inputs(train)`, setting `train = True` to get the training slice of data from the hdf5 files. 
+  3. Create the model graph by calling `bypassrnn_model._model(...)` and obtain a `fetch_dict`, a dictionary of Tensorflow objects to run in a session. Currently, `_model` is implemented to return the total loss if created for training, and a dictionary of predictions at the output time points, if created for evaluation. 
+  4. Create an optimizer, compute gradients, clip gradients if specified, and update the `fetch_dict` to also run the optimization step. 
+  5. Initialize variables and restore variables from file if specified. 
+  6. Start the queues and threads fo reading input.
+  7. Prepare the output files to write losses to. 
+  8. Run the training step for a specified number of times (based on batch size and number of epochs total to run). Periodically save loss and variables to file, if specified. 
+
+## A quick overview of creating a model
+  1. `_model(...)` in `bypassrnn_model.py` is called with various parameters specified.
+  2. Based on the list of bypasses, create a dictionary that serves as a reverse adjacency list, where `adj_list[i]` is a list of the layers whose outputs are inputs to layer *i*. In other words: `adj_list = {TO layer #: FROM [layer, #, ...]}`
+  3. Use the adjacency list to find the shortest path length through the graph. We will enforce `T`, the number of time steps that our model takes, to be greater than `shortest_path`. 
+  4. Generate `cells`, a dictionary of cells that represent each layer, via `_make_cells_dict`.
+  5. Based on the single batch of input images, create a sequence of input images, `input_list`, via `_make_inputs`. **_Note_**: We would change `_make_inputs` if we wanted to change how a sequence of images is created from the base image.* Currently, the sequence is just the original image repeated T times.
+  6. Initialize the model's initial states and layer inputs using `_graph_initials(...)`. **_Note_**: If we want to initialize the state with non-random initial states, we can specify a dictionary of initial states in the model parameter `initial_states`*
+  7. Create dictionaries containing the first time points that a layer matters (`first`) and the last time points that a layer matters. By "matters", we mean the non-trivial output of the cell affects the output layers at the time points of interest (`shortest_path < t < T`). This is done so we can 'trim' the unrolled structure of the graph by not creating unneeded nodes in the graph.
+  8. Iterate through each time point, at each iteration creating a dictionary of current inputs to each layer. For each time point we iterate through all the layers, calling `tf.nn.rnn` on each cell with the appropriate input from `curr_in`. This call will update the state and produce an output, which we will collect and feed in as input on the next time iteration. 
+  9. If `t >= shortest_path`, then the output of the final fully connected/softmax layer is relevant and contains information from the input layer. We collect the loss calculated from each of these outputs in time, multiply it by a power of our `TIME_PENALTY` as specified in `bypassrnn_params.py`, and add it to a collection to be summed up in the `total_loss` afterwards. 
+  10. Return the total loss in the `fetch_dict` if training. Otherwise, we would have collected the predictions (softmax of the logits) of the model and returned those in the `fetch_dict`, if evaluating the model. Then the `_model` client can create a Tensorflow session to run the contents of `fetch_dict`.
+
