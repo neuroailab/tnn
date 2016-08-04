@@ -1,7 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-""" for openmind multi GPUs""" 
+""" use _model(...) to create a graph based on parameters specified in bypassrnn_params.py""" 
+
 import math
 
 #from six.moves import urllib
