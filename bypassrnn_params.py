@@ -10,7 +10,7 @@ DATA_PATH = '/mindhive/dicarlolab/common/imagenet/data.raw' # for openmind runs
 #DATA_PATH = '/data/imagenet_dataset/hdf5_cached_from_om7/data.raw' # for agent runs
 
 IMAGE_SIZE_ORIG = 256
-IMAGE_SIZE = 224 # What we crop it to.
+IMAGE_SIZE = 256 # 224 What we crop it to.
 NUM_CHANNELS = 3
 PIXEL_DEPTH = 255 # from 0 to 255 (WHY NOT 256?)
 NUM_LABELS = 1000 
@@ -20,13 +20,13 @@ TOTAL_IMGS_HDF5 = 1290129
 TRAIN_SIZE = 1000000 #1000000
 NUM_EPOCHS = 80
 
-BATCH_SIZE = 128 * 2 # to be split among GPUs (32 for inception). For train, eval
+BATCH_SIZE = 256 # to be split among GPUs. For train, eval
 # Run configuration parameters (TODO REMOVE IF NOT NEEDED ANYMORE (with hdf5 guy))
 NUM_PREPROCESS_THREADS = 4 # per tower. should be multiple of 4
 NUM_READERS = 4 # parallel readers during training
 INPUT_QUEUE_MEMORY_FACTOR = 4 # size of queue of preprocessed images. If 16 OOM, try 4, 2, 1
 LOG_DEVICE_PLACEMENT = False # SO WE DONT GET SO MUCH OUTPUT, FOR NOW #whether to log device placement
-NUM_GPUS = 2
+NUM_GPUS = 1
 TOWER_NAME = 'tower'
 
 # Evaluation parameters
@@ -47,14 +47,14 @@ SAVE_LOSS_FREQ = 5 # keeps loss from every SAVE_LOSS_FREQ steps.
 
 # Saving model parameters (variables)
 SAVE_VARS = True # save variables if True
-SAVE_VARS_FREQ = 2500 # save variables every SAVE_FREQ steps (Note: will need to coordinate with EVAL_INTERVAL
-# (note cont). wrt timing and # steps ... ..
+SAVE_VARS_FREQ = 3000 # save variables every SAVE_FREQ steps (Note: will need to coordinate with EVAL_INTERVAL
+# (note cont). wrt timing and # steps ... .. # PLEASE MAKE DIVISIBLE BY 10!!
 MAX_TO_KEEP = 5
 
 # Restoring variables from file
 RESTORE_VARS = False #If True, restores variables from VAR_FILE instead of initializing from scratch
 START_STEP = 17500 # to be used for step counter. If RESTORE_VARS=False, we start with 1.
-RESTORE_VAR_FILE = './outputs/finetune/bypass_rnn22ft_v2-' + str(START_STEP) # location of checkpoint file
+RESTORE_VAR_FILE = SAVE_FILE+ '-' + str(START_STEP) # location of checkpoint file
 
 # Graph parameters. Note:  default weight sizes, strides, decay factor -> adjust in ConvRNN.py
 GRAD_CLIP = False
