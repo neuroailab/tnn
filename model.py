@@ -55,7 +55,8 @@ def _model(layers, layer_sizes, bypasses, input_seq,
     if TRIM_TOP:
         first = _first(graph)
     else:
-        first = {j: 0 for j in range(0, N_cells + 1 + 1)}
+        first = {0: 0} # input matters at t = 0, rest starting t = 1
+        first.update({j: 1 for j in range(1, N_cells + 1 + 1)})
 
     if TRIM_BOTTOM:
         last = _last(graph, T_tot)
