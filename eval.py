@@ -103,11 +103,11 @@ def _eval_once(params, saver, top_1_ops, top_5_ops, checkpoint_dir,
                           'sec/batch)' % (datetime.now(), step, num_iter,
                                           examples_per_sec, sec_per_batch))
                     start_time = time.time()
-                    
+
             # Compute top 1 and top 5 error
             top1_error = {t: (1 - count_top_1[t] / total_sample_count) * 100.0
                           for t in t_keys}
-            top5_error = {t: (1 - count_top_1[t] / total_sample_count) * 100.0
+            top5_error = {t: (1 - count_top_5[t] / total_sample_count) * 100.0
                           for t in t_keys}
             T_tot = max(t_keys)
             print('Step %.2f: top1_error = %.4f top5_error = %.4f [%d '
