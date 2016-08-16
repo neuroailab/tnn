@@ -16,6 +16,7 @@ import json
 import os
 from datetime import datetime
 import csv
+import sys
 
 
 def _eval_once(params, saver, top_1_ops, top_5_ops, checkpoint_dir,
@@ -85,8 +86,9 @@ def _eval_once(params, saver, top_1_ops, top_5_ops, checkpoint_dir,
             print('%s: starting evaluation.' % (datetime.now()))
             start_time = time.time()
             while step < num_iter and not coord.should_stop():
-                top1_results = sess.run(top_1_ops)
-                top5_results = sess.run(top_5_ops)
+                results = sess.run({'top1': top_1_ops, 'top5': top_5_ops})
+                top1_results = results['top1']
+                top5_results = results['top5']
 
                 for t in t_keys:
                     # sum # correct for num_iter times
@@ -103,7 +105,7 @@ def _eval_once(params, saver, top_1_ops, top_5_ops, checkpoint_dir,
                           'sec/batch)' % (datetime.now(), step, num_iter,
                                           examples_per_sec, sec_per_batch))
                     start_time = time.time()
-
+                    sys.stdout.flush()  # flush the stdout buffer
             # Compute top 1 and top 5 error
             top1_error = {t: (1 - count_top_1[t] / total_sample_count) * 100.0
                           for t in t_keys}
@@ -149,7 +151,7 @@ def run_eval(params, eval_once, eval_interval_secs=None,
     with tf.Graph().as_default():  # to have multiple graphs [ex: eval, train]
         # Get images and labels for ImageNet.
         data, enqueue_op, images_batch, labels_batch = image_processing.inputs(
-            train=True, params=params)
+            train=False, params=params)
         print('images and labels done')
 
         # Input sequence
@@ -167,7 +169,7 @@ def run_eval(params, eval_once, eval_interval_secs=None,
         # Collect # top1, top5 correct guesses, for each time point, in dict
         top_1_ops = {t: tf.nn.in_top_k(logit, labels_batch, 1)
                      for t, logit in logits.items()}
-        top_5_ops = {t: tf.nn.in_top_k(logit, labels_batch, 1)
+        top_5_ops = {t: tf.nn.in_top_k(logit, labels_batch, 5)
                      for t, logit in logits.items()}
         saver = tf.train.Saver()
 
