@@ -12,7 +12,7 @@ DATA_PATH = '/mindhive/dicarlolab/common/imagenet/data.raw'  # openmind
 # DATA_PATH = '/data/imagenet_dataset/hdf5_cached_from_om7/data.raw' # agent
 
 IMAGE_SIZE_ORIG = 256
-IMAGE_SIZE_CROP = 256  # 224
+IMAGE_SIZE_CROP = 224  # 224
 NUM_CHANNELS = 3
 PIXEL_DEPTH = 255
 NUM_LABELS = 1000
@@ -20,8 +20,8 @@ TOTAL_IMGS_HDF5 = 1290129
 
 # Training parameters
 TRAIN_SIZE = 1000000  # 1000000
-NUM_EPOCHS = 80
-BATCH_SIZE = 128  # to be split among GPUs. For train, eval
+NUM_EPOCHS = 90
+BATCH_SIZE = 256  # to be split among GPUs. For train, eval
 
 # Run configuration parameters
 NUM_PREPROCESS_THREADS = 1  # per tower. should be multiple of 4
@@ -30,16 +30,13 @@ INPUT_QUEUE_MEMORY_FACTOR = 1  # size of queue of preprocessed images.
 LOG_DEVICE_PLACEMENT = False
 
 # Evaluation parameters
-NUM_VALIDATION_BATCHES = 30
+NUM_VALIDATION_BATCHES = 200
 EVAL_BATCH_SIZE = BATCH_SIZE
-EVAL_INTERVAL = 5  # 60 * 5 # seconds between eval runs
-EVAL_RUN_ONCE = False  # run eval only once
-# EVAL_DIR = '/om/user/mrui/tf_imagenet_val' # Where to write logs
 
 # Paths for saving things
 # CHECKPOINT_DIR = '/home/mrui/bypass/outputs/' # for eval to read
-CHECKPOINT_DIR = '/om/user/mrui/bypass/outputs/'
-SAVE_PATH = CHECKPOINT_DIR + 'trial2'  # file name base.
+CHECKPOINT_DIR = '/om/user/mrui/model/outputs/'
+SAVE_PATH = CHECKPOINT_DIR + 'anet1a'  # file name base.
 # NOTE: if you use another directory make sure it exists first.
 
 # use tensorboard for graph visualization. Saved to CHECKPOINT_DIR
@@ -52,12 +49,12 @@ SAVE_LOSS_FREQ = 5  # keeps loss from every SAVE_LOSS_FREQ steps.
 # Saving model parameters (variables)
 SAVE_VARS = True  # save variables if True
 SAVE_VARS_FREQ = 300 * 10  # how often to save vars (divisble by 10)
-MAX_TO_KEEP = 5
+MAX_TO_KEEP = 10
 
 # Restoring variables from file
-RESTORE_VARS = True  # If True, restores variables from RESTORE_VAR_FILE
+RESTORE_VARS = False  # If True, restores variables from RESTORE_VAR_FILE
 START_STEP = 27000  # to be used for step counter.
-RESTORE_VAR_FILE = CHECKPOINT_DIR + 'trial' + '-' + str(START_STEP)
+RESTORE_VAR_FILE = SAVE_PATH + '-' + str(START_STEP)
 
 # loss function parameters
 TIME_PENALTY = 1.2  # 'gamma' time penalty as # time steps passed increases
@@ -65,7 +62,7 @@ TIME_PENALTY = 1.2  # 'gamma' time penalty as # time steps passed increases
 # Optimization parameters
 GRAD_CLIP = False
 LEARNING_RATE_BASE = 0.03  # .001 for Adam. initial learning rate.
-LEARNING_RATE_DECAY_FACTOR = 0.90
+LEARNING_RATE_DECAY_FACTOR = 0.85
 MOMENTUM = 0.9  # for momentum optimizer
 NUM_EPOCHS_PER_DECAY = 1  # exponential decay each epoch
 
@@ -103,7 +100,7 @@ LAYER_SIZES = {
 WEIGHT_DECAY = 0.0005
 FC_KEEP_PROB = 0.5  # for training; config writes None for eval mode
 DECAY_PARAM_INIT = None  # -1.1 initialize decay_factor t= sigmoid(-1.1) = 0.25
-MEMORY = False  # just for Conv or ConvPool layers
+MEMORY = False  # just for Conv or ConvPool layers; True to use memory
 # Note: default weights, strides, etc -> adjust in ConvRNN.py
 BYPASSES = []  # bypasses: list of tuples (from, to)
 
@@ -127,18 +124,16 @@ def get_layers(train):
                                'memory': MEMORY}],
               2: ['ConvPool', {'state_size': LAYER_SIZES[2]['state'],
                                'output_size': LAYER_SIZES[2]['output'],
-                               'conv_size': 3,  # kernel size for conv
+                               'conv_size': 5,  # kernel size for conv
                                'conv_stride': 1,  # stride for conv
                                'weight_decay': WEIGHT_DECAY,  # None for none
                                'pool_size': 3,  # kernel size for pool
                                'decay_param_init': DECAY_PARAM_INIT,
                                'memory': MEMORY}],
-              3: ['ConvPool', {'state_size': LAYER_SIZES[3]['state'],
-                               'output_size': LAYER_SIZES[3]['output'],
+              3: ['Conv', {'state_size': LAYER_SIZES[3]['state'],
                                'conv_size': 3,  # kernel size for conv
                                'conv_stride': 1,  # stride for conv
                                'weight_decay': WEIGHT_DECAY,  # None for none
-                               'pool_size': 3,
                                # kernel size for pool
                                'decay_param_init': DECAY_PARAM_INIT,
                                # (relevant if you have memory)
