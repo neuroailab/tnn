@@ -86,9 +86,8 @@ def _eval_once(params, saver, top_1_ops, top_5_ops, checkpoint_dir,
             print('%s: starting evaluation.' % (datetime.now()))
             start_time = time.time()
             while step < num_iter and not coord.should_stop():
-                results = sess.run({'top1': top_1_ops, 'top5': top_5_ops})
-                top1_results = results['top1']
-                top5_results = results['top5']
+                top1_results = sess.run(top_1_ops)
+                top5_results = sess.run(top_5_ops)
 
                 for t in t_keys:
                     # sum # correct for num_iter times
