@@ -14,7 +14,8 @@ TRIM_TOP = True
 TRIM_BOTTOM = True  # might not need to use, since we don't expect that
 # bottom nodes that don't contribute to final loss will matter. And we also
 # may want to access all layer's outputs or states at time T.
-
+BYPASS_POOL_KERNEL_SIZE = None # None => kernel size = stride size,
+# for pooling between bypass layers.
 
 def _model(layers, layer_sizes, bypasses, input_seq,
            T_tot, initial_states=None, num_labels=1000):
@@ -102,6 +103,7 @@ def _model(layers, layer_sizes, bypasses, input_seq,
                 if len(incoming_shape) == 4:
                     inputs_t = [_maxpool(input=outputs[i][t - 1],
                                          out_spatial=incoming_shape[1],
+                                         kernel_size=BYPASS_POOL_KERNEL_SIZE,
                                          name='bypass_pool') for i in
                                 sorted(incoming)]
                     # concat in channel dim
@@ -147,7 +149,6 @@ def _model(layers, layer_sizes, bypasses, input_seq,
             if t > shortest_path:  # share weights across time
                 varscope.reuse_variables()
             logits[t] = ConvRNN.linear(input_, output_size=num_labels)
-
     return logits
 
 
@@ -257,15 +258,19 @@ def _layers_to_cells(layers):
     return cells
 
 
-def _maxpool(input, out_spatial, name='pool'):
-    """ returns a tf operation for maxpool of input, with stride determined
-    by the spatial size ratio of output and input"""
+def _maxpool(input, out_spatial, kernel_size=None, name='pool'):
+    """ Returns a tf operation for maxpool of input, with stride determined
+    by the spatial size ratio of output and input
+    kernel_size = None will set kernel_size same as stride.
+    """
     in_spatial = input.get_shape().as_list()[1]
     stride = in_spatial / out_spatial  # how much to pool by
     if stride < 1:
         raise ValueError('spatial dimension of output should not be greater '
                          'than that of input')
-    pool = tf.nn.max_pool(input, ksize=[1, stride, stride, 1],
+    if kernel_size is None:
+        kernel_size = stride
+    pool = tf.nn.max_pool(input, ksize=[1, kernel_size, kernel_size, 1],
                           # kernel (filter) size
                           strides=[1, stride, stride, 1], padding='SAME',
                           name=name)
