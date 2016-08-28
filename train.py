@@ -15,7 +15,6 @@ import threading
 import argparse
 import json
 
-TRAIN_SIZE = 1000000 # slice of training images
 
 def run_train(params):
     """
@@ -84,7 +83,7 @@ def run_train(params):
             initializer=tf.constant_initializer(0), trainable=False)
 
         # Calculate the learning rate schedule.
-        num_batches_per_epoch = int((TRAIN_SIZE /
+        num_batches_per_epoch = int((image_processing.TRAIN_SIZE /
                                      params['batch_size']))
         decay_steps = int(
             num_batches_per_epoch * params['num_epochs_per_decay'])
@@ -118,7 +117,7 @@ def run_train(params):
             print('Gradients not clipped')
 
         if params['tensorboard']:  # save graph to tensorboard
-            tf.train.SummaryWriter(params['checkpoint_dir'], sess.graph)
+            tf.train.SummaryWriter(params['tensorboard_dir'], sess.graph)
 
         # fetch dict for session to run
         fetch_dict = ({'opt': optimizer, 'lr': learning_rate})
