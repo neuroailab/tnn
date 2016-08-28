@@ -15,12 +15,12 @@ import threading
 import argparse
 import json
 
+TRAIN_SIZE = 1000000 # slice of training images
 
 def run_train(params):
     """
     :param params: dictionary of params
     """
-    # TODO: try having no gpu/cpu constraints and see effect; then try only gpu
     with tf.Graph().as_default():  # to have multiple graphs [ex: eval, train]
         # create session
         sess = tf.Session(config=tf.ConfigProto(
@@ -28,8 +28,26 @@ def run_train(params):
             log_device_placement=params['log_device_placement']))
 
         # Get images and labels for ImageNet.
-        data, enqueue_op, images_batch, labels_batch = image_processing.inputs(
-            train=True, params=params)
+        if params['random_crop']:
+            # get original size (256) image then take random crop
+            data, enqueue_op, images_batch, labels_batch = image_processing.inputs(
+            train=True, data_path=params['data_path'],
+            crop_size=None, # take original image size
+            batch_size=params['batch_size'],
+            num_validation_batches=0)
+
+            # random crop
+            cropped_shape = [params['batch_size'], params['image_size_crop'],
+                             params['image_size_crop'], params['num_channels']]
+            images_batch = tf.random_crop(images_batch,
+                                          size=cropped_shape,
+                                          name='random_crop')
+        else: # get center cropped image
+            data, enqueue_op, images_batch, labels_batch = image_processing.inputs(
+                train=True, data_path=params['data_path'],
+                crop_size=params['image_size_crop'],  # cropped size
+                batch_size=params['batch_size'],
+                num_validation_batches=0)
         print('images and labels done')
 
         # Input sequence
@@ -37,7 +55,7 @@ def run_train(params):
             input_seq = [images_batch for t in range(0, params['T_tot'])]
         else:
             input_seq = params['input_seq']  # TODO: how to get other input
-            # sequences?
+            # sequences? (use functions)
 
         logits = model._model(params['layers'], params['layer_sizes'],
                               params['bypasses'], input_seq,
@@ -51,19 +69,22 @@ def run_train(params):
             name='xentropy_loss_t' + str(t))
                   for t, logit in logits.items()}
         shortest_path = min(losses.keys())  # earliest time output
-        losses_with_penalty = [tf.mul(loss, math.pow(params['time_penalty'],
-                                                     t - shortest_path)) for
-                               t, loss in losses.items()]
-        total_loss = tf.add_n(losses_with_penalty, name='total_loss')
+
+        # losses with penalty
+        for t, loss in losses.items():
+            tf.add_to_collection('losses', tf.mul(loss,
+                          math.pow(params['time_penalty'], t - shortest_path)))
+        # use 'losses' collection to also add weight decay loss
+        total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
 
         # Create a variable to count the number of train() calls.
         # This equals the number of batches processed.
         global_step = tf.get_variable(
             'global_step', [],
             initializer=tf.constant_initializer(0), trainable=False)
-        
+
         # Calculate the learning rate schedule.
-        num_batches_per_epoch = int((params['train_size'] /
+        num_batches_per_epoch = int((TRAIN_SIZE /
                                      params['batch_size']))
         decay_steps = int(
             num_batches_per_epoch * params['num_epochs_per_decay'])
