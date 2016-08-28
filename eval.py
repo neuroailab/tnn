@@ -1,5 +1,7 @@
 """ Creates and evaluates model from given checkpoint file. May evaluate
-once or multiple times"""
+once or multiple times
+
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -65,8 +67,8 @@ def _eval_once(params, saver, top_1_ops, top_5_ops, checkpoint_dir,
 
         # start queue runners (after initialization/restore step!)
         coord = tf.train.Coordinator()
-        tf.train.start_queue_runners(sess=sess, coord=coord)
-        threads = []
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
         try:
             for i in range(params['num_preprocess_threads']):
                 thread = threading.Thread(target=data.load_and_enqueue,
@@ -81,9 +83,10 @@ def _eval_once(params, saver, top_1_ops, top_5_ops, checkpoint_dir,
             count_top_1 = {t: 0.0 for t in t_keys}
             count_top_5 = {t: 0.0 for t in t_keys}
 
-            total_sample_count = num_iter * params['eval_batch_size']
+            total_sample_count = num_iter * params['batch_size']
             step = 0
             print('%s: starting evaluation.' % (datetime.now()))
+            sys.stdout.flush()  # flush the stdout buffer
             start_time = time.time()
             while step < num_iter and not coord.should_stop():
                 top1_results = sess.run(top_1_ops)
@@ -98,7 +101,7 @@ def _eval_once(params, saver, top_1_ops, top_5_ops, checkpoint_dir,
                 if step % 50 == 0:
                     duration = time.time() - start_time
                     sec_per_batch = duration / 50.0
-                    examples_per_sec = params['eval_batch_size'] / \
+                    examples_per_sec = params['batch_size'] / \
                                sec_per_batch
                     print('%s: [%d batches out of %d] (%.1f examples/sec; %.3f'
                           'sec/batch)' % (datetime.now(), step, num_iter,
@@ -139,6 +142,8 @@ def run_eval(params, eval_once, eval_interval_secs=None,
     """
     Evaluates model - top1 and top5 error -  either once or every
     eval_interval_secs. Saves errors for each time output to files.
+    If params['eval_avg_crop'] == True, evaluates by taking average of
+    logits from 5 crops (4 corners and 1 center similar to AlexNet)
     :param params: dictionary of model and eval parameters
     :param eval_once: If True, evaluates only once rather than every # secs
     :param eval_interval_secs: Number of seconds between evaluations (only
@@ -148,22 +153,77 @@ def run_eval(params, eval_once, eval_interval_secs=None,
     not specified)
     """
     with tf.Graph().as_default():  # to have multiple graphs [ex: eval, train]
+
         # Get images and labels for ImageNet.
-        data, enqueue_op, images_batch, labels_batch = image_processing.inputs(
-            train=False, params=params)
+        if params['eval_avg_crop']:
+            print('Using avg of 5 crops')
+            # take average of logits from 5 crops (4 corners and 1 center)
+            # get original size (256) image then take random crop
+            data, enqueue_op, images_batch, labels_batch = image_processing.inputs(
+                train=False, data_path=params['data_path'],
+                crop_size=None,  # take original image size
+                batch_size=params['batch_size'],
+                num_validation_batches=params['num_validation_batches'])
+
+            # 5 Crops
+
+            cropped_shape = [params['batch_size'], params['image_size_crop'],
+                             params['image_size_crop'], params['num_channels']]
+            spatial_orig = images_batch.get_shape().as_list()[1]  # 256
+            # top left, bottom left, top right, bottom right, center slices
+            slice_tl = tf.slice(images_batch, begin=[0, 0, 0, 0],
+                            size=cropped_shape)
+            slice_bl = tf.slice(images_batch, begin=[0, spatial_orig - params[
+                                    'image_size_crop'], 0, 0],
+                                size=cropped_shape)
+            slice_tr = tf.slice(images_batch, begin=[0, 0, spatial_orig -
+                                params['image_size_crop'], 0],
+                                size=cropped_shape)
+            slice_br = tf.slice(images_batch, begin=[0, spatial_orig - params[
+                                'image_size_crop'], spatial_orig -
+                                 params['image_size_crop'], 0],
+                                size=cropped_shape)
+            r = (spatial_orig - params['image_size_crop']) // 2
+            slice_c = tf.slice(images_batch, begin=[0, r, r, 0],
+                               size=cropped_shape)
+            image_inputs = [slice_tl, slice_bl, slice_tr, slice_br, slice_c]
+
+        else:  # get center cropped image
+            print('Using center crop')
+            data, enqueue_op, images_batch, labels_batch = image_processing.inputs(
+                train=False, data_path=params['data_path'],
+                crop_size=params['image_size_crop'],  # cropped size
+                batch_size=params['batch_size'],
+                num_validation_batches=params['num_validation_batches'])
+            image_inputs = [images_batch]
+        # image_inputs is a list of batches of images
         print('images and labels done')
 
-        # Input sequence
-        if params['input_seq'] is None:
-            input_seq = [images_batch for t in range(0, params['T_tot'])]
-        else:
-            input_seq = params['input_seq']  # TODO: how to get other input
-            # sequences?
+        logits_list = []
+        for i, img_batch in enumerate(image_inputs):
+            if i > 0:
+                tf.get_variable_scope().reuse_variables()
+            # Input sequence
+            if params['input_seq'] is None:
+                input_seq = [img_batch for t in range(0, params['T_tot'])]
+            else:
+                input_seq = params['input_seq']  # TODO: how to get other input
+                # (todo) sequences? using functions?
 
-        logits = model._model(params['layers'], params['layer_sizes'],
-                              params['bypasses'], input_seq,
-                              params['T_tot'], params['initial_states'],
-                              num_labels=params['num_labels'])
+            _logits = model._model(params['layers'], params['layer_sizes'],
+                                    params['bypasses'], input_seq,
+                                    params['T_tot'], params['initial_states'],
+                                    num_labels=params['num_labels'])
+            # _logits = dictionary {t: logits at time t}, collected in
+            # logits_list (if using multiple crops)
+            logits_list.append(_logits)
+
+        # average logits
+        logits = {}
+        for t in _logits.keys():
+            logits_t = [l[t] for l in logits_list]
+            # take average of logits
+            logits[t] = tf.div(tf.add_n(logits_t), float(len(logits_t)))
 
         # Collect # top1, top5 correct guesses, for each time point, in dict
         top_1_ops = {t: tf.nn.in_top_k(logit, labels_batch, 1)
