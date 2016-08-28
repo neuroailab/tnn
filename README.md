@@ -1,7 +1,6 @@
 # bypass+
 Basic overview of files:
 
-For a more structured and systematic implementation, such as for use on openmind, use the following set of files:
   - `params.py`: to specify model architecture, training parameters, and generate .json files to use with train.py and eval.py
   - `model.py`: to create the model based on parameters
   - `train.py`: to run and train a model
