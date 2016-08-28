@@ -15,10 +15,12 @@ Specify the desired model architecture, training parameters, and file paths in `
 ### params.py
 Set the parameter values in params.py and then generate the .json file to use with train.py and eval.py
 For training: 
+
 ```python params.py -o anet_eval.json --save_dir=./ --train```
 or simply ``` python params.py -o anet_train.json --save_dir=./ ```
 
 For validation: 
+
 ``` python params.py -o anet_eval.json --save_dir=./ --eval ```
   
   - `--params (-p)` path to parameters json file
@@ -34,7 +36,7 @@ Specify parameters, frequency of evaluation, and variable file locations to run 
 
   - `--params (-p)` path to parameters json file
   - `--eval_once (-e)` or `--eval_interval_secs (-f)` specify whether to evaluate the model once or continuously. As with the Inception model, we specify the number of seconds between evaluations. 
-  - `--checkpoint_dir (-c)` or `==vars_path (-v)` specify where the model variables to read in are. If `--checkpoint_dir` is specified, the variables file will be loaded based on the checkpoint file in that directory. If `--vars_path`, the direct path to the variable file is specified, that file is loaded (use `--eval_once` with this method).
+  - `--checkpoint_dir (-c)` or `--vars_path (-v)` specify where the model variables to read in are. If `--checkpoint_dir` is specified, the variables file will be loaded based on the checkpoint file in that directory. If `--vars_path`, the direct path to the variable file is specified, that file is loaded (use `--eval_once` with this method).
 
 For example, ```python eval.py --params=anet_eval.json -f=1400 -c='/om/user/mrui/anet/outputs/'```
 
