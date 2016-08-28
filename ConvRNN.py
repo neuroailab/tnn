@@ -27,6 +27,12 @@ POOL_SIZE = None  # defaults to match the pool_stride, which is determined by
 # POOL_STRIDE --> PRE-DETERMINED by input and output sizes.
 DECAY_PARAM_INITIAL = 0  # (actual decay factor is sigmoid(p_j) = 0.5)
 
+# Local response norm
+LRN_RADIUS = 2
+LRN_ALPHA = 2e-05
+LRN_BETA = 0.75
+LRN_BIAS = 1.0
+
 
 def _weights(shape, init=DEFAULT_INITIALIZER, stddev=WEIGHT_STDDEV):
     """
@@ -84,15 +90,19 @@ def to_decay_factor(decay_parameter):
     return decay_factor
 
 
-def maxpool(input, in_spatial, out_spatial, kernel_size=None, name='pool'):
-    """ Pooling stride is determined by the in and out spatial; this is
-    important for the pooling between bypass layers.
-    kernel_size=None will set kernel_size same as stride.
+def maxpool(input_, out_spatial, kernel_size=None, name='pool'):
+    """ Returns a tf operation for maxpool of input, with stride determined
+    by the spatial size ratio of output and input
+    kernel_size = None will set kernel_size same as stride.
     """
+    in_spatial = input_.get_shape().as_list()[1]
     stride = in_spatial / out_spatial  # how much to pool by
+    if stride < 1:
+        raise ValueError('spatial dimension of output should not be greater '
+                         'than that of input')
     if kernel_size is None:
         kernel_size = stride
-    pool = tf.nn.max_pool(input, ksize=[1, kernel_size, kernel_size, 1],
+    pool = tf.nn.max_pool(input_, ksize=[1, kernel_size, kernel_size, 1],
                           # kernel (filter) size
                           strides=[1, stride, stride, 1], padding='SAME',
                           name=name)
@@ -105,6 +115,7 @@ class ConvPoolRNNCell(RNNCell):
                  weight_init=DEFAULT_INITIALIZER, weight_stddev=WEIGHT_STDDEV,
                  weight_decay=None,
                  bias_init=BIAS_INIT,
+                 lrn=False,
                  pool_size=POOL_SIZE,
                  decay_param_init=DECAY_PARAM_INITIAL,
                  memory=True):
@@ -120,6 +131,7 @@ class ConvPoolRNNCell(RNNCell):
         self.weight_stddev = weight_stddev
         self.weight_decay = weight_decay
         self.bias_init = bias_init
+        self.lrn = lrn  # using local response normalization
         self.pool_size = pool_size
         self.decay_param_init = decay_param_init
         self.memory = memory
@@ -150,6 +162,13 @@ class ConvPoolRNNCell(RNNCell):
             bias = _bias([output_shape[3]], bias_init=self.bias_init)
             conv = _conv(inputs, weights, bias,
                          conv_stride=self.conv_stride)  # conv of inputs
+
+            if self.lrn:
+                conv = tf.nn.local_response_normalization(conv,
+                                                      depth_radius=LRN_RADIUS,
+                                                      alpha=LRN_ALPHA,
+                                                      beta=LRN_BETA,
+                                                      bias=LRN_BIAS)
             if self.memory:
                 decay_factor = to_decay_factor(
                     _decay_param(initial=self.decay_param_init))
@@ -160,8 +179,7 @@ class ConvPoolRNNCell(RNNCell):
             relu = _relu(new_state)  # activation function
             # pool. Stride depends on input spatial (of conv's output)
             # and desired out_spatial
-            pool = maxpool(input=relu,
-                           in_spatial=conv.get_shape().as_list()[1],
+            pool = maxpool(input_=relu,
                            out_spatial=output_shape[1],
                            kernel_size=self.pool_size)
         return pool, new_state
@@ -184,6 +202,7 @@ class ConvRNNCell(RNNCell):
                  weight_init=DEFAULT_INITIALIZER, weight_stddev=WEIGHT_STDDEV,
                  weight_decay=None,
                  bias_init=BIAS_INIT,
+                 lrn=False,
                  decay_param_init=DECAY_PARAM_INITIAL,
                  memory=True):
         """ state_size = same size as conv of input
@@ -198,6 +217,7 @@ class ConvRNNCell(RNNCell):
         self.weight_stddev = weight_stddev
         self.weight_decay = weight_decay
         self.bias_init = bias_init
+        self.lrn = lrn
         self.decay_param_init = decay_param_init
         self.memory = memory
 
@@ -227,6 +247,14 @@ class ConvRNNCell(RNNCell):
             bias = _bias([output_shape[3]], bias_init=self.bias_init)
             conv = _conv(inputs, weights, bias,
                          conv_stride=self.conv_stride)  # conv of inputs
+
+            if self.lrn:  # local response norm
+                conv = tf.nn.local_response_normalization(conv,
+                                                      depth_radius=LRN_RADIUS,
+                                                      alpha=LRN_ALPHA,
+                                                      beta=LRN_BETA,
+                                                      bias=LRN_BIAS)
+
             if self.memory:
                 decay_factor = to_decay_factor(
                     _decay_param(initial=self.decay_param_init))
@@ -256,7 +284,7 @@ def _flatten(input):
 
 def linear(input, output_size,
            weight_init=DEFAULT_INITIALIZER, weight_stddev=WEIGHT_STDDEV,
-           bias_init=BIAS_INIT, scope=None):
+           bias_init=BIAS_INIT):
     # input is flattened already. Check this:
     input_shape = input.get_shape().as_list()
     if len(input_shape) > 2:
@@ -307,7 +335,7 @@ class FcRNNCell(RNNCell):
             linear_ = linear(input=inputs, output_size=self._output_size[1],
                              weight_init=self.weight_init,
                              weight_stddev=self.weight_stddev,
-                             bias_init=self.bias_init, scope=None)
+                             bias_init=self.bias_init)
             if self.memory:
                 decay_factor = to_decay_factor(
                     _decay_param(initial=self.decay_param_init))
