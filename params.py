@@ -30,11 +30,11 @@ NUM_VALIDATION_BATCHES = 100
 
 # use tensorboard for graph visualization (not activations)
 TENSORBOARD = False
-TENSORBOARD_DIR = '/om/user/mrui/anet3b/outputs/'  # save tensorboard graph
+TENSORBOARD_DIR = '/om/user/mrui/anet_byp1/outputs/'  # save tensorboard graph
 
 # Paths for saving things
-SAVE_PATH = '/om/user/mrui/anet3b/outputs/model'  # file
-# name base.
+SAVE_PATH = '/om/user/mrui/anet_byp1/outputs/anet_byp1'  # file name
+# Note: can also specify via argparse
 # NOTE: if you use another directory make sure it exists first.
 
 # Write training loss to file SAVE_PATH + '_loss.csv'
@@ -100,7 +100,7 @@ FC_KEEP_PROB = 0.5  # for training; config writes None for eval mode
 DECAY_PARAM_INIT = None  # -1.1 initialize decay_factor t= sigmoid(-1.1) = 0.25
 MEMORY = False  # just for Conv or ConvPool layers; True to use memory
 # Note: default weights, strides, etc -> adjust in ConvRNN.py
-BYPASSES = []  # bypasses: list of tuples (from, to)
+BYPASSES = [(1,5)]  # bypasses: list of tuples (from, to)
 
 
 def get_layers(train):
@@ -177,8 +177,11 @@ def toJSON(args):
     LAYERS = get_layers(train=train)
 
     if save_dir is not None:
-        SAVE_PATH = args.save_dir + 'model'
-        RESTORE_VAR_FILE = SAVE_PATH + '-' + str(START_STEP)
+        save_path = args.save_dir + 'model'
+        restore_var_file = save_path + '-' + str(START_STEP)
+    else:
+        save_path = SAVE_PATH
+        restore_var_file = RESTORE_VAR_FILE
     parameters = {  # image parameters
         'data_path': DATA_PATH,
         'image_size_crop': IMAGE_SIZE_CROP,
