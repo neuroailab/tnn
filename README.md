@@ -40,8 +40,14 @@ Specify parameters, frequency of evaluation, and variable file locations to run 
 
 For example, ```python eval.py --params=anet_eval.json -f=1400 -c='/om/user/mrui/anet/outputs/'```
 
-  
-  
+### get_features_hvm.py 
+Make sure your params file is correct (and set BATCH_SIZE = 1) since we will evaluate images 1 by 1.
+For example, to get the logits from a model with tf variable parameters in anet-327000 and save them to output files in ./outputs/ we use: 
+
+```
+python params.py -o anet_eval.json --eval # need eval flag so dropoout not used in evaluation
+python get_features_hvm.py -p=anet_eval.json -v='/home/mrui/bypass/consistency/vars/anet-327000' --train --test -o='./outputs/anet'
+```  
 ### Explanation of some parameters:
   - **Model inputs**
     - Change the `DATA_PATH` based on whether you are running on openmind or on the agents
