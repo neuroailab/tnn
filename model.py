@@ -18,17 +18,20 @@ BYPASS_POOL_KERNEL_SIZE = None # None => kernel size = stride size,
 # for pooling between bypass layers.
 
 def _model(layers, layer_sizes, bypasses, input_seq,
-           T_tot, initial_states=None, num_labels=1000):
+           T_tot, initial_states=None, num_labels=1000, features_layer=None):
     """
     Creates model graph and returns logits.
     :param layers: Dictionary to construct cells for each layer of the form
-    {layer #: ['cell type', {arguments}] Does not include the final linear
-    layer used to get logits.
+     {layer #: ['cell type', {arguments}] Does not include the final linear
+     layer used to get logits.
     :param layer_sizes: Dictionary of dictionaries containing state and
-    output sizes for each layer
+     output sizes for each layer
     :param bypasses: list of tuples (from, to)
     :param input_seq: list for sequence of input images as tf Tensors
     :param T_tot: total number of time steps to run the model.
+    :param features_layer: if None (equivalent to a value of len(layers) + 1) ,
+     outputs logitsfrom last FC. Otherwise, accepts a number 0 through
+     len(layers) + 1 and _model will output the features of that layer.
     :param initial_states: optional; dict of initial state {layer#: tf Tensor}
     :param num_labels: Size of logits to output [1000 for ImageNet]
 
@@ -140,16 +143,24 @@ def _model(layers, layer_sizes, bypasses, input_seq,
                 outputs[j][t] = outputs_list[i]
             final_states[j] = final_state  # todo - return if desired.
 
-    # last FC to get logits = {t: logits(t)} for t in [shortest path, T]
-    logits = {}
-    for t in range(shortest_path, T_tot + 1):
-        print('--Final FC---t', t, '-----------')
-        input_ = _flatten_input(outputs[N_cells][t - 1])
-        with tf.variable_scope('final_fc') as varscope:
-            if t > shortest_path:  # share weights across time
-                varscope.reuse_variables()
-            logits[t] = ConvRNN.linear(input_, output_size=num_labels)
-    return logits
+    if (features_layer is not None) and (features_layer != N_cells + 1):
+        print('Returning features from layer ', features_layer)
+        features = {t: feat_t for t, feat_t in outputs[features_layer] if
+                    t >= first[features_layer] and t <= last[
+                        features_layer]} # {tn:__, tn+1:__, ... }}
+        return features
+    else:
+        print('Returning logits')
+        # last FC to get logits = {t: logits(t)} for t in [shortest path, T]
+        logits = {}
+        for t in range(shortest_path, T_tot + 1):
+            print('--Final FC---t', t, '-----------')
+            input_ = _flatten_input(outputs[N_cells][t - 1])
+            with tf.variable_scope('final_fc') as varscope:
+                if t > shortest_path:  # share weights across time
+                    varscope.reuse_variables()
+                logits[t] = ConvRNN.linear(input_, output_size=num_labels)
+        return logits
 
 
 def _first(graph):
