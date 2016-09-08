@@ -34,7 +34,6 @@ def _model(layers, layer_sizes, bypasses, input_seq,
      len(layers) + 1 and _model will output the features of that layer.
     :param initial_states: optional; dict of initial state {layer#: tf Tensor}
     :param num_labels: Size of logits to output [1000 for ImageNet]
-
     :return: Returns a dictionary logits (output of a linear FC layer after
     all layers). {time t: logits} for t >= shortest_path and t < T_total}
     """
