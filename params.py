@@ -200,7 +200,7 @@ def toJSON(args):
         'tensorboard_dir': TENSORBOARD_DIR,
 
         # saving path
-        'save_path': SAVE_PATH,
+        'save_path': save_path,
         'save_loss': SAVE_LOSS,
         'save_loss_freq': SAVE_LOSS_FREQ,
         'save_vars': SAVE_VARS,
@@ -210,7 +210,7 @@ def toJSON(args):
         # restoring variables from file
         'restore_vars': RESTORE_VARS,
         'start_step': START_STEP,
-        'restore_var_file': RESTORE_VAR_FILE,
+        'restore_var_file': restore_var_file,
 
         # graph parameters
         'T_tot': T_TOT,
