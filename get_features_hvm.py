@@ -39,7 +39,8 @@ def get_features(params, outfile,
             # get list of image paths for tf FileReader and make filename queue
             filenames_list = [HVM10_TRAIN_PATH + id + '.png' for id in
                               meta_data.id]
-            filename_queue = tf.train.string_input_producer(filenames_list)
+            filename_queue = tf.train.string_input_producer(filenames_list,
+                                                            shuffle=False)
             reader = tf.WholeFileReader()
             key, value = reader.read(filename_queue)
             print('Reading from training set')
@@ -59,7 +60,8 @@ def get_features(params, outfile,
             # get list of image paths for tf FileReader and make filename queue
             filenames_list = [HVM10_TEST_PATH + a.split('20110131/')[1]
                               for a in meta_data]
-            filename_queue = tf.train.string_input_producer(filenames_list)
+            filename_queue = tf.train.string_input_producer(filenames_list,
+                                                            shuffle=False)
             reader = tf.WholeFileReader()
             key, value = reader.read(filename_queue)
             print('Reading from test set')
@@ -83,7 +85,7 @@ def _features(img_raw, num_imgs, params, layer,
     :param params: parameters dictionary
     :param layer: which layer to get features from
     :param checkpoint_dir: directory with checkpoint file
-    :param vars_path: file containing tf saver's variable file 
+    :param vars_path: file containing tf saver's variable file
     """
     with tf.Session(config=tf.ConfigProto(
             allow_soft_placement=True,
