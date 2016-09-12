@@ -72,7 +72,7 @@ def _relu(input):
     return tf.nn.relu(input, name='relu')
 
 
-def _decay_param(initial=DECAY_PARAM_INITIAL, trainable=True):
+def _decay_param(initial=DECAY_PARAM_INITIAL, trainable=False):
     """
     Returns the parameter for the actual decay FACTOR in [0,1]
     (take the sigmoid of this value)
@@ -117,8 +117,10 @@ class ConvPoolRNNCell(RNNCell):
                  bias_init=BIAS_INIT,
                  lrn=False,
                  pool_size=POOL_SIZE,
+                 memory=False,
                  decay_param_init=DECAY_PARAM_INITIAL,
-                 memory=True):
+                 trainable_decay=False
+                 ):
         """ state_size = same size as conv of input
         memory=True to use decay factor in state transition.
         If False, state is not remembered"""
@@ -133,8 +135,9 @@ class ConvPoolRNNCell(RNNCell):
         self.bias_init = bias_init
         self.lrn = lrn  # using local response normalization
         self.pool_size = pool_size
-        self.decay_param_init = decay_param_init
         self.memory = memory
+        self.decay_param_init = decay_param_init
+        self.trainable_decay = trainable_decay # decay param trainable or not
 
     def zero_state(self, batch_size, dtype):
         """Return zero-filled state tensor"""
@@ -171,7 +174,8 @@ class ConvPoolRNNCell(RNNCell):
                                                       bias=LRN_BIAS)
             if self.memory:
                 decay_factor = to_decay_factor(
-                    _decay_param(initial=self.decay_param_init))
+                    _decay_param(initial=self.decay_param_init,
+                                 trainable=self.trainable_decay))
                 # new state = decay(old state) + conv(inputs)
                 new_state = tf.mul(state, decay_factor) + conv
             else:  # no 'self-loop' with state
@@ -203,8 +207,10 @@ class ConvRNNCell(RNNCell):
                  weight_decay=None,
                  bias_init=BIAS_INIT,
                  lrn=False,
+                 memory=False,
                  decay_param_init=DECAY_PARAM_INITIAL,
-                 memory=True):
+                 trainable_decay=False
+                 ):
         """ state_size = same size as conv of input
         memory=True to use decay factor in state transition.
         If False, state is not remembered"""
@@ -218,8 +224,9 @@ class ConvRNNCell(RNNCell):
         self.weight_decay = weight_decay
         self.bias_init = bias_init
         self.lrn = lrn
-        self.decay_param_init = decay_param_init
         self.memory = memory
+        self.decay_param_init = decay_param_init
+        self.trainable_decay = trainable_decay  # decay param trainable or not
 
     def zero_state(self, batch_size, dtype):
         """Return zero-filled state tensor"""
@@ -257,7 +264,8 @@ class ConvRNNCell(RNNCell):
 
             if self.memory:
                 decay_factor = to_decay_factor(
-                    _decay_param(initial=self.decay_param_init))
+                    _decay_param(initial=self.decay_param_init,
+                                 trainable=self.trainable_decay))
                 # new state = decay(old state) + conv(inputs)
                 new_state = tf.mul(state, decay_factor) + conv
             else:  # no 'self-loop' with state
@@ -307,8 +315,9 @@ class FcRNNCell(RNNCell):
                  weight_init=DEFAULT_INITIALIZER, weight_stddev=WEIGHT_STDDEV,
                  bias_init=BIAS_INIT,
                  keep_prob=None,  # for dropout
+                 memory=False,
                  decay_param_init=DECAY_PARAM_INITIAL,
-                 memory=True):
+                 trainable_decay=False):
         """state_size = same size as output. Used for zero_state creation"""
         # state_size, output_size = [batch_size, fc_output_size]
         self._state_size = state_size  # used for zero_state. conv(input) size
@@ -317,8 +326,9 @@ class FcRNNCell(RNNCell):
         self.weight_stddev = weight_stddev
         self.keep_prob = keep_prob  # if None, no dropout used
         self.bias_init = bias_init
-        self.decay_param_init = decay_param_init
         self.memory = memory
+        self.decay_param_init = decay_param_init
+        self.trainable_decay = trainable_decay  # decay param trainable or not
 
     def zero_state(self, batch_size, dtype):
         """Return zero-filled state tensor"""
@@ -338,7 +348,8 @@ class FcRNNCell(RNNCell):
                              bias_init=self.bias_init)
             if self.memory:
                 decay_factor = to_decay_factor(
-                    _decay_param(initial=self.decay_param_init))
+                    _decay_param(initial=self.decay_param_init,
+                                 trainable=self.trainable_decay))
                 # new state = decay(old state) + linear(inputs)
                 new_state = tf.mul(state, decay_factor) + linear_
             else:  # no 'self-loop' with state
