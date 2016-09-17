@@ -172,7 +172,7 @@ def run_train(params):
                 if params['save_vars'] and \
                                     step % params['save_vars_freq'] == 0:
                     saver.save(sess, save_path=params['save_path'],
-                               global_step=global_step)
+                               global_step=global_step, write_meta_graph=False)
                     print('saved variable checkpoint')
 
                 # write loss to file
