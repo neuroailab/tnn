@@ -14,6 +14,7 @@ import sys
 import threading
 import argparse
 import json
+import subprocess
 
 
 def run_train(params):
@@ -206,13 +207,25 @@ def run_train(params):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser('parameters to JSON')
-    parser.add_argument('-p', '--params', default='./params.json',
-                        help='path to parameters file', dest='params',
-                        required=True)
+    parser = argparse.ArgumentParser('train.py')
+    parser.add_argument('-p', '--params',
+                        help='path to json parameters file OR path to '
+                             'params.py script that accepts the right flags '
+                             '(-o and --train).',
+                        dest='params', required=True)
 
     args = parser.parse_args()
-    with open(args.params, 'r') as f:
+
+    if args.params.endswith('.py'):
+        subprocess.call(['python', args.params,
+                         '-o', './params_train.json', '--train'])
+        json_file = './params_train.json'
+    elif args.params.endswith('.json'):
+        json_file = args.params
+    else:
+        raise ValueError('Need to specify a .py or .json parameters file')
+
+    with open(json_file, 'r') as f:
         params = json.load(f)
     # Convert keys from String to Int since JSON serialization turns
     # everything into strings.
