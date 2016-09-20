@@ -30,10 +30,11 @@ NUM_VALIDATION_BATCHES = 100
 
 # use tensorboard for graph visualization (not activations)
 TENSORBOARD = False
-TENSORBOARD_DIR = '/om/user/mrui/anet_byp1/outputs/'  # save tensorboard graph
+TENSORBOARD_DIR = '/om/user/mrui/anet_byp13_tp3_mem/outputs/'  # save tensorboard
+# graph
 
 # Paths for saving things
-SAVE_PATH = '/om/user/mrui/anet_byp1/outputs/anet_byp1'  # file name
+SAVE_PATH = '/om/user/mrui/anet_byp13_tp3_mem/outputs/anet_byp13_tp3_mem'  # file name
 # Note: can also specify via argparse
 # NOTE: if you use another directory make sure it exists first.
 
@@ -53,11 +54,11 @@ RESTORE_VAR_FILE = SAVE_PATH + '-' + str(START_STEP)  # if SAVE_PATH is given
 #  through argparse, RESTORE_VAR_FILE is based on that save_path
 
 # loss function parameters
-TIME_PENALTY = 1.2  # 'gamma' time penalty as # time steps passed increases
+TIME_PENALTY = 3  # 'gamma' time penalty as # time steps passed increases
 
 # Optimization parameters
 GRAD_CLIP = False
-LEARNING_RATE_BASE = 0.03  # .001 for Adam. initial learning rate.
+LEARNING_RATE_BASE = 0.02  # .001 for Adam. initial learning rate.
 LEARNING_RATE_DECAY_FACTOR = 0.85
 MOMENTUM = 0.9  # for momentum optimizer
 NUM_EPOCHS_PER_DECAY = 1  # exponential decay each epoch
@@ -97,10 +98,11 @@ LAYER_SIZES = {
 
 WEIGHT_DECAY = 0.0005
 FC_KEEP_PROB = 0.5  # for training; config writes None for eval mode
-DECAY_PARAM_INIT = None  # -1.1 initialize decay_factor t= sigmoid(-1.1) = 0.25
-MEMORY = False  # just for Conv or ConvPool layers; True to use memory
+MEMORY = True  # just for Conv or ConvPool layers; True to use memory
+DECAY_PARAM_INIT = 0  #  initialize decay_factor sigmoid(0) = 0.5
+TRAINABLE_DECAY = False
 # Note: default weights, strides, etc -> adjust in ConvRNN.py
-BYPASSES = [(1,5)]  # bypasses: list of tuples (from, to)
+BYPASSES = [(1,3)]  # bypasses: list of tuples (from, to)
 
 
 def get_layers(train):
@@ -120,9 +122,11 @@ def get_layers(train):
                                'pool_size': 3,
                                # kernel size for pool (defaults
                                # to = stride determined by layer sizes.),
+                               'memory': MEMORY,
                                'decay_param_init': DECAY_PARAM_INIT,
                                # (relevant if you have memory)
-                               'memory': MEMORY}],
+                               'trainable_decay': TRAINABLE_DECAY
+                               }],
               2: ['ConvPool', {'state_size': LAYER_SIZES[2]['state'],
                                'output_size': LAYER_SIZES[2]['output'],
                                'conv_size': 5,  # kernel size for conv
@@ -130,30 +134,37 @@ def get_layers(train):
                                'weight_decay': WEIGHT_DECAY,  # None for none
                                'lrn': True,  # use local response norm
                                'pool_size': 3,  # kernel size for pool
+                               'memory': MEMORY,
                                'decay_param_init': DECAY_PARAM_INIT,
-                               'memory': MEMORY}],
+                               # (relevant if you have memory)
+                               'trainable_decay': TRAINABLE_DECAY}],
               3: ['Conv', {'state_size': LAYER_SIZES[3]['state'],
                            'conv_size': 3,  # kernel size for conv
                            'conv_stride': 1,  # stride for conv
                            'weight_decay': WEIGHT_DECAY,  # None for none
                            # kernel size for pool
+                           'memory': MEMORY,
                            'decay_param_init': DECAY_PARAM_INIT,
                            # (relevant if you have memory)
-                           'memory': MEMORY}],
+                           'trainable_decay': TRAINABLE_DECAY}],
               4: ['Conv', {'state_size': LAYER_SIZES[4]['state'],
                            'conv_size': 3,  # kernel size for conv
                            'conv_stride': 1,  # stride for conv
                            'weight_decay': WEIGHT_DECAY,  # None for none
+                           'memory': MEMORY,
                            'decay_param_init': DECAY_PARAM_INIT,
-                           'memory': MEMORY}],
+                           # (relevant if you have memory)
+                           'trainable_decay': TRAINABLE_DECAY}],
               5: ['ConvPool', {'state_size': LAYER_SIZES[5]['state'],
                                'output_size': LAYER_SIZES[5]['output'],
                                'conv_size': 3,  # kernel size for conv
                                'conv_stride': 1,  # stride for conv
                                'weight_decay': WEIGHT_DECAY,  # None for none
                                'pool_size': 3,
+                               'memory': MEMORY,
                                'decay_param_init': DECAY_PARAM_INIT,
-                               'memory': MEMORY}],
+                               # (relevant if you have memory)
+                               'trainable_decay': TRAINABLE_DECAY}],
               6: ['FC', {'state_size': LAYER_SIZES[6]['state'],
                          'keep_prob': fc_keep_prob,
                          'memory': False}],
@@ -164,20 +175,19 @@ def get_layers(train):
     return layers
 
 
-def toJSON(args):
+def toJSON(outfile, train, save_dir):
     """
-    :param args: arguments from argparse to specify where to save json file,
-    training or validation, directory to save results
+    :param outfile: path to save json file,
+    :param train: True = train model params, False = eval model params
+    :param save_dir: (optional) directory to save output files for training or
+     validation error, checkpoint files, and variables (ending with "/"')
     :return: writes parameters to JSON file specified by outfile
     """
-    outfile = args.out
-    train = args.train  # True to return JSON with training parameters;
-    # otherwise JSON contains eval parameters
-    save_dir = args.save_dir
+
     LAYERS = get_layers(train=train)
 
     if save_dir is not None:
-        save_path = args.save_dir + 'model'
+        save_path = save_dir + 'model'
         restore_var_file = save_path + '-' + str(START_STEP)
     else:
         save_path = SAVE_PATH
@@ -270,4 +280,4 @@ if __name__ == "__main__":
                              'files, and variables (ending with "/"')
     args = parser.parse_args()
     print('Training:', args.train)
-    toJSON(args)
+    toJSON(outfile=args.out, train=args.train, save_dir=args.save_dir)
