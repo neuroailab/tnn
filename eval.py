@@ -19,7 +19,7 @@ import os
 from datetime import datetime
 import csv
 import sys
-
+import subprocess
 
 def _eval_once(params, saver, top_1_ops, top_5_ops, checkpoint_dir,
                vars_path, data, enqueue_op):
@@ -250,10 +250,12 @@ def run_eval(params, eval_once, eval_interval_secs=None,
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser('parameters to JSON')
-    parser.add_argument('-p', '--params', default='./params.json',
-                        help='path to parameters file', dest='params',
-                        required=True)
+    parser = argparse.ArgumentParser('eval.py')
+    parser.add_argument('-p', '--params',
+                        help='path to json parameters file OR path to '
+                             'params.py script that accepts the right flags '
+                             '(-o and --train).',
+                        dest='params', required=True)
     parser.add_argument('-e', '--eval_once', dest='eval_once',
                         action='store_true', default=False, help='evaluate '
                         'model once or continuously [default].')
@@ -266,14 +268,28 @@ if __name__ == "__main__":
                       'file (instead of checkpoint dir). If both provided, '
                       'checkpoint is used',
                         dest='vars_path')
+
     args = parser.parse_args()
+
     if args.checkpoint_dir is None and args.vars_path is None:
         raise ValueError(
             'Please provide either checkpoint directory or path to'
             ' model parameters file ')
     print('eval once:', args.eval_once)
-    with open(args.params, 'r') as f:
+
+    # get params file
+    if args.params.endswith('.py'):
+        subprocess.call(['python', args.params,
+                         '-o', './params_eval.json', '--eval'])
+        json_file = './params_eval.json'
+    elif args.params.endswith('.json'):
+        json_file = args.params
+    else:
+        raise ValueError('Need to specify a .py or .json parameters file')
+
+    with open(json_file, 'r') as f:
         params = json.load(f)
+
     # Convert keys from String to Int since JSON serialization turns
     # everything into strings.
     for entry in ['layers', 'layer_sizes']:
