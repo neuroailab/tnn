@@ -2,25 +2,122 @@
 The "model" function is used to create a TF graph given layers and bypasses
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import tensorflow as tf
 import networkx as nx
-import ConvRNN
+import tensorflow as tf
 
-TRIM_TOP = True
-TRIM_BOTTOM = True  # might not need to use, since we don't expect that
-# bottom nodes that don't contribute to final loss will matter. And we also
-# may want to access all layer's outputs or states at time T.
-BYPASS_POOL_KERNEL_SIZE = None # None => kernel size = stride size,
-# for pooling between bypass layers.
+from conv_rnn_cell import ConvRNNCell
 
-def _model(layers, layer_sizes, bypasses, input_seq,
-           T_tot, initial_states=None, num_labels=1000, features_layer=None):
+
+def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
+           init_weights='xavier', train=True):
+    dropout = dropout if train else None
+
+    class Conv1(ConvRNNCell):
+        def __call__(self, inputs, state):
+            with tf.variable_scope(type(self).__name__):
+                conv = self.conv(inputs, 96, 11, 4, stddev=.1, bias=.1,
+                                 init=init_weights, weight_decay=weight_decay)
+                norm = self.lrn(conv)
+                new_state = self.memory(norm, state, memory_decay=memory_decay)
+                relu = self.relu(new_state)
+                pool = self.pool(relu, 3, 2)
+            return pool, new_state
+
+    class Conv2(ConvRNNCell):
+        def __call__(self, inputs, state):
+            with tf.variable_scope(type(self).__name__):
+                conv = self.conv(inputs, 256, 5, 1, stddev=.1, bias=.1,
+                                 init=init_weights, weight_decay=weight_decay)
+                norm = self.lrn(conv)
+                new_state = self.memory(norm, state, memory_decay=memory_decay)
+                relu = self.relu(new_state)
+                pool = self.pool(relu, 3, 2)
+            return pool, new_state
+
+    class Conv3(ConvRNNCell):
+        def __call__(self, inputs, state):
+            with tf.variable_scope(type(self).__name__):
+                conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
+                                 init=init_weights, weight_decay=weight_decay)
+                new_state = self.memory(conv, state, memory_decay=memory_decay)
+                relu = self.relu(new_state)
+            return relu, new_state
+
+    class Conv4(ConvRNNCell):
+        def __call__(self, inputs, state):
+            with tf.variable_scope(type(self).__name__):
+                conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
+                                init=init_weights, weight_decay=weight_decay)
+                new_state = self.memory(conv, state, memory_decay=memory_decay)
+                relu = self.relu(new_state)
+            return relu, new_state
+
+    class Conv5(ConvRNNCell):
+        def __call__(self, inputs, state):
+            with tf.variable_scope(type(self).__name__):
+                conv = self.conv(inputs, 256, 3, 1, stddev=.1, bias=.1,
+                                 init=init_weights, weight_decay=weight_decay)
+                new_state = self.memory(conv, state, memory_decay=memory_decay)
+                relu = self.relu(new_state)
+                pool = self.pool(relu, 3, 2)
+            return pool, new_state
+
+    class FC6(ConvRNNCell):
+        def __call__(self, inputs, state):
+            with tf.variable_scope(type(self).__name__):
+                resh = tf.reshape(inputs, [inputs.get_shape().as_list()[0], -1])
+                fc = self.fc(resh, 4096, dropout=dropout, stddev=.1, bias=.1,
+                            init=init_weights)
+                new_state = self.memory(fc, state, memory_decay=memory_decay)
+                relu = self.relu(new_state)
+                drop = self.dropout(relu, dropout=dropout)
+            return drop, new_state
+
+    class FC7(ConvRNNCell):
+        def __call__(self, inputs, state):
+            with tf.variable_scope(type(self).__name__):
+                fc = self.fc(inputs, 4096, dropout=dropout, stddev=.1, bias=.1,
+                            init=init_weights)
+                new_state = self.memory(fc, state, memory_decay=memory_decay)
+                relu = self.relu(new_state)
+                drop = self.dropout(relu, dropout=dropout)
+            return drop, new_state
+
+    class FC8(ConvRNNCell):
+        def __call__(self, inputs, state):
+            with tf.variable_scope(type(self).__name__):
+                fc = self.fc(inputs, 1000, dropout=None, stddev=.1, bias=.1,
+                            init=init_weights)
+                new_state = self.memory(fc, state, memory_decay=memory_decay)
+                relu = self.relu(new_state)
+            return relu, new_state
+
+    layers = [Conv1, Conv2, Conv3, Conv4, Conv5, FC6, FC7, FC8]
+
+    return layers
+
+
+def get_model(model_func,
+              input_seq,
+              train=False,
+              bypasses=[],
+              layer_sizes=None,
+              T_tot=8,
+              init_weights='xavier',
+              weight_decay=None,
+              dropout=None,
+              memory_decay=None,
+            #   initial_states=None,
+              num_labels=1000,
+              trim_top=True,
+              trim_bottom=True,
+              features_layer=None,
+              bypass_pool_kernel_size=None):
     """
     Creates model graph and returns logits.
+
     :param layers: Dictionary to construct cells for each layer of the form
      {layer #: ['cell type', {arguments}] Does not include the final linear
      layer used to get logits.
@@ -34,46 +131,52 @@ def _model(layers, layer_sizes, bypasses, input_seq,
      len(layers) + 1 and _model will output the features of that layer.
     :param initial_states: optional; dict of initial state {layer#: tf Tensor}
     :param num_labels: Size of logits to output [1000 for ImageNet]
+
     :return: Returns a dictionary logits (output of a linear FC layer after
     all layers). {time t: logits} for t >= shortest_path and t < T_total}
     """
 
-    # get dictionary of RNNCells
-    cells = _layers_to_cells(layers)
-
     # create networkx graph with layer #s as nodes
-    N_cells = len(layers)  # number of layers without final FC/logits
-    graph = _graph(bypasses, N_cells=N_cells)
+    layers = model_func(weight_decay=weight_decay, memory_decay=memory_decay,
+                        dropout=dropout, init_weights=init_weights, train=train)
+    graph = _construct_graph(layers, layer_sizes, bypasses)
+
+    nlayers = len(layers)  # number of layers including the final FC/logits
+    ntimes = len(input_seq)
 
     # ensure that graph is acyclic
-    assert (nx.is_directed_acyclic_graph(graph)), 'graph not acyclic'
+    if not nx.is_directed_acyclic_graph(graph):
+        raise ValueError('graph not acyclic')
 
     # ensure that T_tot >= shortest_path through graph
-    shortest_path = nx.shortest_path_length(graph, source=0,
-                                            target=N_cells + 1)
-    assert (T_tot >= shortest_path), \
-        'T_tot (%d) < shortest path length (%d)' % (T_tot, shortest_path)
+    shortest_path = nx.shortest_path_length(graph, source=0, target=nlayers)
+    if ntimes < shortest_path:
+        raise ValueError('T_tot ({}) < shortest path length ({})'.format(T_tot,
+                                                                 shortest_path))
 
     # get first and last time points where layers matter
-    if TRIM_TOP:
-        first = _first(graph)
+    if trim_top:
+        _first(graph)
     else:
-        first = {0: 0} # input matters at t = 0, rest starting t = 1
-        first.update({j: 1 for j in range(1, N_cells + 1 + 1)})
+        graph.node[0]['first'] = 0  # input matters at t = 0, rest starting t = 1
+        for node in graph:
+            graph.node[node]['first'] = 1
 
-    if TRIM_BOTTOM:
-        last = _last(graph, T_tot)
+    if trim_bottom:
+        _last(graph, ntimes)
     else:
-        last = {j: T_tot for j in range(0, N_cells + 1 + 1)}
+        for node in graph:
+            graph.node[node]['last'] = ntimes
 
     # check inputs: Compares input sequence length with the input length
     # that is needed for output at T_tot. Zero pads or truncates as needed
-    if len(input_seq) > last[0] + 1:  # more inputs than needed => truncate
-        print('truncating input sequence to length', last[0] + 1)
-        del input_seq[last[0] + 1:]
-    elif len(input_seq) < last[0] + 1:  # too short => pad with zero inputs
-        print('zero-padding input sequence to length', last[0] + 1)
-        num_needed = (last[0] + 1) - len(input_seq)  # inputs to add
+    # TODO: can this scenario happen?
+    if len(input_seq) > graph.node[0]['last'] + 1:  # more inputs than needed => truncate
+        print('truncating input sequence to length', graph.node[0]['last'] + 1)
+        del input_seq[graph.node[0]['last'] + 1:]
+    elif len(input_seq) < graph.node[0]['last'] + 1:  # too short => pad with zero inputs
+        print('zero-padding input sequence to length', graph.node[0]['last'] + 1)
+        num_needed = (graph.node[0]['last'] + 1) - len(input_seq)  # inputs to add
         if not input_seq:  # need input length of at least one
             raise ValueError('input sequence should not be empty')
         padding = [tf.zeros_like(input_seq[0]) for i in range(0, num_needed)]
@@ -81,85 +184,126 @@ def _model(layers, layer_sizes, bypasses, input_seq,
 
     # add inputs to outputs dict for layer 0
     # outputs = {layer#: {t1:__, t2:__, ... }}
-    outputs = {0: {t: input_ for t, input_ in enumerate(input_seq)}}
-    final_states = {}  # holds final states from the last time state changes
+    graph.node[0]['inputs'] = None
+    graph.node[0]['outputs'] = input_seq
+    graph.node[0]['initial_states'] = None
+    graph.node[0]['final_states'] = None
 
     # create zero initial states if none specified
-    if initial_states is None:
-        # zero state returns zeros (tf.float32) based on state size.
-        initial_states = {j: cells[j].zero_state(None, None) for j in
-                          range(1, N_cells + 1)}
+    # if initial_states is None:
+    # zero state returns zeros (tf.float32) based on state size.
+    for layer in graph:
+        if layer == 0:
+            st = None
+        else:
+            st = graph.node[layer]['cell'].zero_state(None, None)
+        graph.node[layer]['initial_states'] = st
 
     # create graph layer by layer
-    for j in range(1, N_cells + 1):
-        with tf.variable_scope(layers[j][0] + '_' + str(j)):
-            print('------------j:', j, ' - ', layers[j][0], '-----------')
-            # create inputs list for layer j, each element is an input in time
-            inputs = []  # list of inputs to layer j in time
-            incoming = graph.predecessors(j)  # list of incoming nodes
+    for node in graph:
+        if node > 0:
+            layer = graph.node[node]
+            with tf.variable_scope(layer['name']):
+                print('{:-^80}'.format(layer['name']))
+                # create inputs list for layer j, each element is an input in time
+                layer['inputs'] = []  # list of inputs to layer j in time
+                parents = graph.predecessors(node)  # list of incoming nodes
 
-            # for relevant time points: gather inputs, pool, and concatenate
-            for t in range(first[j], last[j] + 1):
-                # concatenate inputs (pooled to right spatial size) at time t
-                incoming_shape = layer_sizes[j - 1]['output']  # with no bypass
-                if len(incoming_shape) == 4:
-                    inputs_t = [_maxpool(input=outputs[i][t - 1],
-                                         out_spatial=incoming_shape[1],
-                                         kernel_size=BYPASS_POOL_KERNEL_SIZE,
-                                         name='bypass_pool') for i in
-                                sorted(incoming)]
-                    # concat in channel dim
-                    inputs.append(tf.concat(3, inputs_t))
+                # for relevant time points: gather inputs, pool, and concatenate
+                for t in range(layer['first'], layer['last'] + 1):
+                    # concatenate inputs (pooled to right spatial size) at time t
+                    # incoming_shape = layer_sizes[j - 1]['output']  # with no bypass
+                    # if node == 5 and t == 2: import pdb; pdb.set_trace()
+                    if len(layer['cell'].state_size) == 4:
+                        if node == 1:
+                            output_size = input_seq[0].get_shape().as_list()[1]
+                        else:
+                            output_size = graph.node[node-1]['cell'].output_size[1]
 
-                else:  # if input is 2D (ex: after FC layer)
-                    print('FC')
-                    # no bypass to FC layers beyond first FC
-                    assert (len(incoming) == 1), 'No bypass to FC layers ' \
-                                                 'beyond first FC allowed'
-                    inputs_t = outputs[incoming[0]][t - 1]
-                    inputs.append(inputs_t)
-                print('inputs at t = ', t, ':', inputs_t)
+                        inputs_t = []
+                        for parent in sorted(parents):
+                            input_tp = _maxpool(
+                                input_=graph.node[parent]['outputs'][t - 1],
+                                out_spatial=output_size,
+                                kernel_size=bypass_pool_kernel_size,
+                                name='bypass_pool')
+                            inputs_t.append(input_tp)
 
-            # run tf.nn.rnn and get list of outputs
-            # Even if initial_states[j] is None, tf.nn.rnn will just set
-            # zero initial state (given dtype)
-            if inputs:
-                outputs_list, final_state = tf.nn.rnn(cell=cells[j],
-                                                      inputs=inputs,
-                                                      initial_state=
-                                                      initial_states[j],
-                                                      dtype=tf.float32)
-            else:  # if empty, layer j doesn't contribute to output t<= T_tot
-                final_state = initial_states[j]
+                        # concat in channel dim
+                        layer['inputs'].append(tf.concat(3, inputs_t))
 
-            # trim graph- fill in empty outputs with zeros
-            outputs[j] = {t: tf.zeros(shape=layer_sizes[j]['output'],
-                                      dtype=tf.float32) for t in
-                          range(0, first[j])}
+                    else:  # if input is 2D (ex: after FC layer)
+                        print('FC')
+                        # no bypass to FC layers beyond first FC
+                        if len(parents) != 1:
+                            raise ValueError('No bypass to FC layers '
+                                             'beyond first FC allowed')
+                        inputs_t = graph.node[parents[0]]['outputs'][t - 1]
+                        layer['inputs'].append(inputs_t)
+                    print('inputs at t = {}: {}'.format(t, inputs_t))
 
-            # update outputs and state dictionary
-            for i, t in enumerate(range(first[j], last[j] + 1)):
-                outputs[j][t] = outputs_list[i]
-            final_states[j] = final_state  # todo - return if desired.
+                # run tf.nn.rnn and get list of outputs
+                # Even if initial_states[j] is None, tf.nn.rnn will just set
+                # zero initial state (given dtype)
+                if len(layer['inputs']) > 0:
+                    out, fstate = tf.nn.rnn(cell=layer['cell'],
+                                            inputs=layer['inputs'],
+                                            initial_state=layer['initial_states'],
+                                            dtype=tf.float32)
+                else:  # if empty, layer j doesn't contribute to output t<= T_tot
+                    fstate = layer['initial_states']
 
-    if (features_layer is not None) and (features_layer != N_cells + 1):
-        print('Returning features from layer ', features_layer)
-        features = {t: feat_t for t, feat_t in outputs[features_layer] if
-                    t >= first[features_layer] and t <= last[
-                        features_layer]} # {tn:__, tn+1:__, ... }}
-        return features
+                # trim graph- fill in empty outputs with zeros
+                out_first = []
+                for t in range(0, layer['first']):
+                    out_first.append(tf.zeros(shape=layer['cell'].output_size,
+                                              dtype=tf.float32))
+                out = out_first + out
+
+                layer['outputs'] = out
+                layer['final_states'] = fstate
+
+    for node in graph:
+        if node > 0:
+            layer = graph.node[node]
+            layer['outputs'] = layer['outputs'][layer['first']:layer['last'] + 1]
+
+    if features_layer is None:
+        return graph.node[len(layers)]['outputs']
     else:
-        print('Returning logits')
-        # last FC to get logits = {t: logits(t)} for t in [shortest path, T]
-        logits = {}
-        for t in range(shortest_path, T_tot + 1):
-            print('--Final FC---t', t, '-----------')
-            input_ = _flatten_input(outputs[N_cells][t - 1])
-            with tf.variable_scope('final_fc') as varscope:
-                if t > shortest_path:  # share weights across time
-                    varscope.reuse_variables()
-                logits[t] = ConvRNN.linear(input_, output_size=num_labels)
-        return logits
+        return graph[features_layer]['outputs']
+
+
+def _construct_graph(layers, layer_sizes, bypasses):
+    """
+    Constructs networkx DiGraph based on bypass connections
+    :param bypasses: list of tuples (from, to)
+    :param N_cells: number of layers not including last FC for logits
+    :return: Returns a networkx DiGraph where nodes are layer #s, starting
+    from 0 (input) to N_cells + 1 (last FC layer for logits)
+    """
+    graph = nx.DiGraph()
+    nlayers = len(layer_sizes)
+    graph.add_node(0, cell=None)
+    for node, layer in enumerate(layers):
+        cell = layer(layer_sizes[node + 1]['output'],
+                     layer_sizes[node + 1]['state'])
+        graph.add_node(node + 1, cell=cell, name=cell.scope)
+
+    regular_connections = [(j, j + 1) for j in range(0, nlayers - 1)]
+
+    # add regular connections (aka 1->2, 2->3...)
+    graph.add_edges_from(regular_connections)
+
+    #  adjacent layers
+    graph.add_edges_from(bypasses)  # add bypass connections
+    print(graph.nodes())
+
+    # check that bypasses don't add extraneous nodes
+    if len(graph) != nlayers:
+        raise ValueError('bypasses list created extraneous nodes')
+
+    return graph
 
 
 def _first(graph):
@@ -170,24 +314,19 @@ def _first(graph):
     :return: dictionary first[j] = time t where layer j matters. j ranges
     from 0 to N_cells + 1
     """
-    first = {}
-    curr_ind = [0]
+    curr_layers = [0]
     t = 0
-    while len(first) < graph.number_of_nodes():  # = N_cells + 2 to account for
-        # input and final logits layer
-        next_ind = []  # layers reached at next time point
-        # for current indices, check if already accounted for in first
-        for ind in curr_ind:
-            if ind not in first:
-                first[ind] = t
-                # then add all neighbors to next_ind
-                next_ind.extend(graph.successors(ind))
-        curr_ind = next_ind
+    while len(curr_layers) > 0:
+        next_layers = []
+        for layer in curr_layers:
+            if 'first' not in graph.node[layer]:
+                graph.node[layer]['first'] = t
+                next_layers.extend(graph.successors(layer))
+        curr_layers = next_layers
         t += 1
-    return first
 
 
-def _last(graph, T_tot):
+def _last(graph, ntimes):
     """
     Returns dictionary with times of when each layer last matters, that is,
     last time t where layer j information reaches output layer at, before T_tot
@@ -196,107 +335,57 @@ def _last(graph, T_tot):
     :param T_tot: total number of time steps to run the model.
     :return: dictionary {layer j: last time t}
     """
-    last = {}
-    curr_ind = [graph.number_of_nodes() - 1]  # start with output layer
-    t = T_tot
-    while len(last) < graph.number_of_nodes():
-        next_ind = []  # layers at prev time point
-        for ind in curr_ind:
-            if ind not in last:
-                last[ind] = t
-                # then add adjacency list onto next_ind
-                next_ind.extend(graph.predecessors(ind))
-        curr_ind = next_ind
+    curr_layers = [len(graph) - 1]  # start with output layer
+    t = ntimes
+    while len(curr_layers) > 0:
+        next_layers = []  # layers at prev time point
+        for layer in curr_layers:
+            if 'last' not in graph.node[layer]:
+                graph.node[layer]['last'] = t
+                # then add adjacency list onto next_layer
+                next_layers.extend(graph.predecessors(layer))
+        curr_layers = next_layers
         t -= 1
-    return last
 
 
-def _graph(bypasses, N_cells):
+def _maxpool(input_, out_spatial, kernel_size=None, name='pool'):
     """
-    Constructs networkx DiGraph based on bypass connections
-    :param bypasses: list of tuples (from, to)
-    :param N_cells: number of layers not including last FC for logits
-    :return: Returns a networkx DiGraph where nodes are layer #s, starting
-    from 0 (input) to N_cells + 1 (last FC layer for logits)
-    """
-    graph = nx.DiGraph()
-    regular_connections = [(j, j + 1) for j in range(0, N_cells + 1)]
+    Returns a tf operation for maxpool of input
 
-    # add regular connections (aka 1->2, 2->3...)
-    graph.add_edges_from(regular_connections)
-
-    #  adjacent layers
-    graph.add_edges_from(bypasses)  # add bypass connections
-
-    # check that bypasses don't add extraneous nodes
-    assert (graph.number_of_nodes() == N_cells + 2), \
-        'bypasses list is not valid'
-    return graph
-
-
-def _flatten_input(input_):
-    """
-        Flattens input (if not already flattened). Use for input to FC layers
-        :param input_: tf Tensor
-        :return: flattened input of size [batch_size, spatial*spatial*channels]
-    """
-    # flatten input to [#batches, input_size]
-    input_shape = input_.get_shape().as_list()
-    if len(input_shape) > 2:  # needs flattening. assumed to have dim. 4
-        input_size = input_shape[1] * input_shape[2] * input_shape[3]
-        input_ = tf.reshape(input_, [-1, input_size])
-    return input_
-
-
-def _layers_to_cells(layers):
-    """
-    Converts dictionary of layers and parameters to actual RNNCell objects.
-    Note: the RNNCell's operations have not yet been created (so no weights,
-    biases, etc. exist yet)
-    :param layers: dictionary {layer #: ['cell type', {arguments}]
-    :return: dictionary of cells {layer #: RNN Cell}
-    """
-    cells = {}
-    for k, fun_list in layers.iteritems():
-        fun_name = fun_list[0]  # 'fun' = 'function'
-        cell_cases = {'conv': ConvRNN.ConvRNNCell,
-                      'convpool': ConvRNN.ConvPoolRNNCell,
-                      'fc': ConvRNN.FcRNNCell}  # switch-case equivalent
-        fun = cell_cases[fun_name.lower()]  # case insensitive search
-        kwarg_items = fun_list[1]
-        cells[k] = fun(**kwarg_items)
-    return cells
-
-
-def _maxpool(input, out_spatial, kernel_size=None, name='pool'):
-    """ Returns a tf operation for maxpool of input, with stride determined
-    by the spatial size ratio of output and input
+    Stride determined by the spatial size ratio of output and input
     kernel_size = None will set kernel_size same as stride.
     """
-    in_spatial = input.get_shape().as_list()[1]
-    stride = in_spatial / out_spatial  # how much to pool by
+    in_spatial = input_.get_shape().as_list()[1]
+    stride = in_spatial // out_spatial  # how much to pool by
     if stride < 1:
+        import pdb; pdb.set_trace()
         raise ValueError('spatial dimension of output should not be greater '
                          'than that of input')
     if kernel_size is None:
         kernel_size = stride
-    pool = tf.nn.max_pool(input, ksize=[1, kernel_size, kernel_size, 1],
-                          # kernel (filter) size
-                          strides=[1, stride, stride, 1], padding='SAME',
+    pool = tf.nn.max_pool(input_,
+                          ksize=[1, kernel_size, kernel_size, 1],
+                          strides=[1, stride, stride, 1],
+                          padding='SAME',
                           name=name)
     return pool
 
 
-def _graph_initials(layer_sizes, N_cells):
-    """
-    Returns prev_out dict with all zeros (tensors) but first input,
-    curr_states with all Nones input should be a TENSOR!! """
-    prev_out = {}
-    curr_states = {}
-    for i in range(1, N_cells + 1):  # 1, ... N_cells
-        prev_out[i] = tf.zeros(shape=layer_sizes[i]['output'],
-                               dtype=tf.float32,
-                               name='zero_out')  # init. zeros of correct size
-        curr_states[i] = None
-        # note: can also initialize state to random distribution, etc...
-    return prev_out, curr_states
+def get_loss(output_seq, labels_seq, loss_fun=None, time_penalty=1.2):
+    """Calculate total loss (with time penalty)"""
+
+    if loss_fun is None:
+        loss_fun = tf.nn.sparse_softmax_cross_entropy_with_logits
+
+    losses = []
+    for t, (outputs, labels) in enumerate(zip(output_seq, labels_seq)):
+        loss_t = tf.reduce_mean(loss_fun(outputs, labels),
+                                name='xentropy_loss_t{}'.format(t))
+        loss_t = loss_t * time_penalty**t
+        tf.add_to_collection('losses', loss_t)
+        losses.append(loss_t)
+
+    # use 'losses' collection to also add weight decay loss
+    total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
+
+    return total_loss
