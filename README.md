@@ -31,14 +31,21 @@ For validation:
 ### train.py
 Specify parameters when running train.py: ```python train.py --params=anet_train.json```
 
+One can also pass the `params.py` python file; a `params_train.json` file will be generated and used. 
+``` python train.py --params=params.py```
+
 ### eval.py
 Specify parameters, frequency of evaluation, and variable file locations to run eval.py
-
   - `--params (-p)` path to parameters json file
   - `--eval_once (-e)` or `--eval_interval_secs (-f)` specify whether to evaluate the model once or continuously. As with the Inception model, we specify the number of seconds between evaluations. 
   - `--checkpoint_dir (-c)` or `--vars_path (-v)` specify where the model variables to read in are. If `--checkpoint_dir` is specified, the variables file will be loaded based on the checkpoint file in that directory. If `--vars_path`, the direct path to the variable file is specified, that file is loaded (use `--eval_once` with this method).
 
-For example, ```python eval.py --params=anet_eval.json -f=1400 -c='/om/user/mrui/anet/outputs/'```
+For example: ```python eval.py --params=anet_eval.json -f=1400 -c='/om/user/mrui/anet/outputs/'```
+
+One can also pass the `params.py` python file; a `params_eval.json` file will be generated and used:
+
+```python eval.py --params=params.py -f=1400 -c='/om/user/mrui/anet/outputs/'````
+
 
 ### get_features_hvm.py 
 Make sure your params file is correct (and set BATCH_SIZE = 1) since we will evaluate images 1 by 1.
