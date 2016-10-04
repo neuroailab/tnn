@@ -6,8 +6,8 @@ from __future__ import print_function
 
 import os, json
 
-
-if os.uname()[1].startswith('node'):  # OpenMind
+host = os.uname()[1]
+if host.startswith('node') or host == 'openmind7':  # OpenMind
     # DATA_PATH = '/mindhive/dicarlolab/common/imagenet/data.raw'
     data_path = '/om/user/qbilius/imagenet/data.raw'
     restore_var_file = '/mindhive/dicarlolab/u/qbilius/computed/bypass_test/'
@@ -56,7 +56,7 @@ params = {
                     #  through argparse, RESTORE_VAR_FILE is based on that save_path
 
         # tensorboard
-        'tensorboard': True,  # use tensorboard for graph visualization
+        'tensorboard': False,  # use tensorboard for graph visualization
                               # (not activations)
         'tensorboard_dir': restore_var_file + 'output',  # save tensorboard graph
     },
@@ -132,7 +132,3 @@ params = {
         'num_epochs_per_decay': 1,  # exponential decay each epoch
     }
 }
-
-outfile = 'params.json'
-with open(outfile, 'w') as f:
-    json.dump(params, f)
