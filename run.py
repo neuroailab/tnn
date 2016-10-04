@@ -4,7 +4,7 @@ Main run module
 
 from __future__ import absolute_import, division, print_function
 
-import json
+import os, json, argparse
 
 import numpy as np
 import tensorflow as tf
@@ -20,7 +20,8 @@ def get_data(train=True,
              num_train_images=2**20,
              num_valid_images=2**14,
              num_threads=4,
-             random_crop=True
+             random_crop=True,
+             T_tot=8
              ):
     # Get images and labels for ImageNet.
     print('images and labels done')
@@ -35,8 +36,8 @@ def get_data(train=True,
                           crop_size=image_size_crop,
                           batch_size=batch_size,
                           n_threads=num_threads)
-
-    return d
+    input_seq = [d.batch['data']] * T_tot
+    return input_seq, d
 
 
 def get_learning_rate(num_batches_per_epoch=1,
@@ -83,59 +84,65 @@ def get_optimizer(loss, learning_rate=.01, momentum=.9, grad_clip=True):
 
 
 def main(args):
-    params = json.load(open('params.json'))
-    # dict keys are stored as str; coverting back to int
-    for k, v in params['model']['layer_sizes'].items():
-        params['model']['layer_sizes'][int(k)] = v
-        del params['model']['layer_sizes'][k]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-g', '--gpu', default='0', type=str)
+    args = parser.parse_args(args[1:])
 
-    with tf.Graph().as_default():  # to have multiple graphs [ex: eval, train]
-        rng = np.random.RandomState(seed=params['seed'])
-        tf.set_random_seed(params['seed'])
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
-        tf.get_variable('global_step', [],
-                        initializer=tf.constant_initializer(0),
-                        trainable=False)
+    from params import params
+    outfile = 'params.json'
 
-        train_data = get_data(train=True, **params['data'])
+    with open(outfile, 'w') as f:
+        json.dump(params, f)
+    # params = json.load(open('params.json'))
 
-        input_seq = [train_data.batch['data']] * params['model']['T_tot']
-        label_seq = [train_data.batch['labels']] * params['model']['T_tot']
-        output_seq = model.get_model(model.alexnet, input_seq,
-                                     train=params['train'],
-                                     features_layer=None,  # last layer
-                                     **params['model']
-                                     )
+    # # dict keys are stored as str; coverting back to int
+    # for k, v in params['model']['layer_sizes'].items():
+    #     params['model']['layer_sizes'][int(k)] = v
+    #     del params['model']['layer_sizes'][k]
 
-        loss = model.get_loss(output_seq, label_seq, loss_fun=None, **params['loss'])
-        lr = get_learning_rate(params['num_train_batches'], **params['learning_rate'])
-        optimizer = get_optimizer(loss, lr, **params['optimizer'])
+    model_func_kwargs = {'model_func': model.alexnet,
+                         'train': params['train'],
+                         'features_layer': None  # last layer
+                         }
+    model_func_kwargs.update(params['model'])
 
-        # validation
-        valid_data = get_data(train=False, **params['data'])
-        top_1_ops = [tf.nn.in_top_k(output, valid_data.batch['labels'], 1)
-                     for output in output_seq]
-        top_5_ops = [tf.nn.in_top_k(output, valid_data.batch['labels'], 5)
-                     for output in output_seq]
+    train_data = train_data_func(train=True, **params['data'])
+    input_seq = [train_data.batch['data']] * params['model']['T_tot']
+    label_seq = [train_data.batch['labels']] * params['model']['T_tot']
 
-        # create session
-        sess = tf.Session(config=tf.ConfigProto(
-                          allow_soft_placement=True,
-                          log_device_placement=params['log_device_placement']))
+    # validation
+    valid_data = valid_data_func(train=False, **valid_data_func_kwargs)
+    top_1_ops = [tf.nn.in_top_k(output, valid_data.batch['labels'], 1)
+                    for output in output_seq]
+    top_5_ops = [tf.nn.in_top_k(output, valid_data.batch['labels'], 5)
+                    for output in output_seq]
 
-        saver = base.Saver(sess, **params['saver'])
+    lr_func_kwargs = {'num_batches_per_epoch': params['num_batches_per_epoch']}
+    lr_func_kwargs.update(params['learning_rate'])
 
-        # to keep consistent count (of epochs passed, etc.)
-        start_step = params['saver']['start_step'] if params['saver']['restore_vars'] else 0
-        end_step = params['num_epochs'] * params['num_train_batches']
+    # to keep consistent count (of epochs passed, etc.)
+    start_step = params['saver']['start_step'] if params['saver']['restore_vars'] else 0
+    end_step = params['num_epochs'] * params['num_train_batches']
 
-        base.run(sess,
-                 [train_data, valid_data],
-                 saver,
-                 train_targets={'loss': loss, 'lr': lr, 'opt': optimizer},
-                 valid_targets={'top1': top_1_ops, 'top5': top_5_ops},
-                 start_step=start_step,
-                 end_step=end_step)
+    base.run(model_func=get_model,
+            model_func_kwargs=model_func_kwargs,
+            data_func=get_data,
+            data_func_kwargs=params['data'],
+            loss_func=get_loss,
+            loss_func_kwargs=params['loss'],
+            lr_func=get_learning_rate,
+            lr_func_kwargs=lr_func_kwargs,
+            opt_func=get_optimizer,
+            opt_func_kwargs=params['optimizer'],
+            train_targets=None,
+            valid_targets={'top1': top_1_ops, 'top5': top_5_ops},,
+            seed=params['seed'],
+            start_step=start_step,
+            end_step=end_step,
+            log_device_placement=params['log_device_placement']
+            )
 
 
 if __name__ == '__main__':
