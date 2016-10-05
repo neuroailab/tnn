@@ -11,96 +11,96 @@ from conv_rnn_cell import ConvRNNCell
 
 
 def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
-           init_weights='xavier', train=True):
+            init_weights='xavier', train=True):
     dropout = dropout if train else None
 
     class Conv1(ConvRNNCell):
         def __call__(self, inputs, state):
-            with tf.variable_scope(type(self).__name__):
+            # with tf.variable_scope(type(self).__name__, reuse=True):
                 conv = self.conv(inputs, 96, 11, 4, stddev=.1, bias=.1,
                                  init=init_weights, weight_decay=weight_decay)
                 norm = self.lrn(conv)
                 new_state = self.memory(norm, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
                 pool = self.pool(relu, 3, 2)
-            return pool, new_state
+                return pool, new_state
 
     class Conv2(ConvRNNCell):
         def __call__(self, inputs, state):
-            with tf.variable_scope(type(self).__name__):
+            # with tf.variable_scope(type(self).__name__, reuse=True):
                 conv = self.conv(inputs, 256, 5, 1, stddev=.1, bias=.1,
                                  init=init_weights, weight_decay=weight_decay)
                 norm = self.lrn(conv)
                 new_state = self.memory(norm, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
                 pool = self.pool(relu, 3, 2)
-            return pool, new_state
+                return pool, new_state
 
     class Conv3(ConvRNNCell):
         def __call__(self, inputs, state):
-            with tf.variable_scope(type(self).__name__):
+            # with tf.variable_scope(type(self).__name__, reuse=True):
                 conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
                                  init=init_weights, weight_decay=weight_decay)
                 new_state = self.memory(conv, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
-            return relu, new_state
+                return relu, new_state
 
     class Conv4(ConvRNNCell):
         def __call__(self, inputs, state):
-            with tf.variable_scope(type(self).__name__):
+            # with tf.variable_scope(type(self).__name__, reuse=True):
                 conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
                                 init=init_weights, weight_decay=weight_decay)
                 new_state = self.memory(conv, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
-            return relu, new_state
+                return relu, new_state
 
     class Conv5(ConvRNNCell):
         def __call__(self, inputs, state):
-            with tf.variable_scope(type(self).__name__):
+            # with tf.variable_scope(type(self).__name__, reuse=True):
                 conv = self.conv(inputs, 256, 3, 1, stddev=.1, bias=.1,
                                  init=init_weights, weight_decay=weight_decay)
                 new_state = self.memory(conv, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
                 pool = self.pool(relu, 3, 2)
-            return pool, new_state
+                return pool, new_state
 
     class FC6(ConvRNNCell):
         def __call__(self, inputs, state):
-            with tf.variable_scope(type(self).__name__):
+            # with tf.variable_scope(type(self).__name__, reuse=True):
                 resh = tf.reshape(inputs, [inputs.get_shape().as_list()[0], -1])
                 fc = self.fc(resh, 4096, dropout=dropout, stddev=.1, bias=.1,
                             init=init_weights)
                 new_state = self.memory(fc, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
                 drop = self.dropout(relu, dropout=dropout)
-            return drop, new_state
+                return drop, new_state
 
     class FC7(ConvRNNCell):
         def __call__(self, inputs, state):
-            with tf.variable_scope(type(self).__name__):
+            # with tf.variable_scope(type(self).__name__, reuse=True):
                 fc = self.fc(inputs, 4096, dropout=dropout, stddev=.1, bias=.1,
                             init=init_weights)
                 new_state = self.memory(fc, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
                 drop = self.dropout(relu, dropout=dropout)
-            return drop, new_state
+                return drop, new_state
 
     class FC8(ConvRNNCell):
         def __call__(self, inputs, state):
-            with tf.variable_scope(type(self).__name__):
+            # with tf.variable_scope(type(self).__name__, reuse=True):
                 fc = self.fc(inputs, 1000, dropout=None, stddev=.1, bias=.1,
                             init=init_weights)
                 new_state = self.memory(fc, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
-            return relu, new_state
+                return relu, new_state
 
     layers = [Conv1, Conv2, Conv3, Conv4, Conv5, FC6, FC7, FC8]
 
     return layers
 
 
-def get_model(model_func,
-              input_seq,
+def get_model(input_seq,
+              model_base=None,
               train=False,
               bypasses=[],
               layer_sizes=None,
@@ -137,7 +137,7 @@ def get_model(model_func,
     """
 
     # create networkx graph with layer #s as nodes
-    layers = model_func(weight_decay=weight_decay, memory_decay=memory_decay,
+    layers = model_base(weight_decay=weight_decay, memory_decay=memory_decay,
                         dropout=dropout, init_weights=init_weights, train=train)
     graph = _construct_graph(layers, layer_sizes, bypasses)
 
@@ -199,11 +199,12 @@ def get_model(model_func,
             st = graph.node[layer]['cell'].zero_state(None, None)
         graph.node[layer]['initial_states'] = st
 
+    reuse = None if train else True
     # create graph layer by layer
     for node in graph:
         if node > 0:
             layer = graph.node[node]
-            with tf.variable_scope(layer['name']):
+            with tf.variable_scope(layer['name'], reuse=reuse):
                 print('{:-^80}'.format(layer['name']))
                 # create inputs list for layer j, each element is an input in time
                 layer['inputs'] = []  # list of inputs to layer j in time

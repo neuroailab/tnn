@@ -37,7 +37,8 @@ def get_data(train=True,
                           batch_size=batch_size,
                           n_threads=num_threads)
     input_seq = [d.batch['data']] * T_tot
-    return input_seq, d
+    output_seq = [d.batch['labels']] * T_tot
+    return input_seq, output_seq, d
 
 
 def get_learning_rate(num_batches_per_epoch=1,
@@ -102,42 +103,35 @@ def main(args):
     #     params['model']['layer_sizes'][int(k)] = v
     #     del params['model']['layer_sizes'][k]
 
-    model_func_kwargs = {'model_func': model.alexnet,
-                         'train': params['train'],
+    model_func_kwargs = {'model_base': model.alexnet,
+                        #  'train': params['train'],
                          'features_layer': None  # last layer
                          }
     model_func_kwargs.update(params['model'])
 
-    train_data = train_data_func(train=True, **params['data'])
-    input_seq = [train_data.batch['data']] * params['model']['T_tot']
-    label_seq = [train_data.batch['labels']] * params['model']['T_tot']
+    data_func_kwargs = {'T_tot': params['model']['T_tot']}
+    data_func_kwargs.update(params['data'])
 
-    # validation
-    valid_data = valid_data_func(train=False, **valid_data_func_kwargs)
-    top_1_ops = [tf.nn.in_top_k(output, valid_data.batch['labels'], 1)
-                    for output in output_seq]
-    top_5_ops = [tf.nn.in_top_k(output, valid_data.batch['labels'], 5)
-                    for output in output_seq]
-
-    lr_func_kwargs = {'num_batches_per_epoch': params['num_batches_per_epoch']}
+    lr_func_kwargs = {'num_batches_per_epoch': params['num_train_batches']}
     lr_func_kwargs.update(params['learning_rate'])
 
     # to keep consistent count (of epochs passed, etc.)
     start_step = params['saver']['start_step'] if params['saver']['restore_vars'] else 0
     end_step = params['num_epochs'] * params['num_train_batches']
 
-    base.run(model_func=get_model,
+    base.run(model_func=model.get_model,
             model_func_kwargs=model_func_kwargs,
             data_func=get_data,
             data_func_kwargs=params['data'],
-            loss_func=get_loss,
+            loss_func=model.get_loss,
             loss_func_kwargs=params['loss'],
             lr_func=get_learning_rate,
             lr_func_kwargs=lr_func_kwargs,
             opt_func=get_optimizer,
             opt_func_kwargs=params['optimizer'],
+            saver_kwargs=params['saver'],
             train_targets=None,
-            valid_targets={'top1': top_1_ops, 'top5': top_5_ops},,
+            valid_targets=None,
             seed=params['seed'],
             start_step=start_step,
             end_step=end_step,

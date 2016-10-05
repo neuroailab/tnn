@@ -26,7 +26,7 @@ params = {
     # run configuration parameters
     'num_epochs': 90,  # number of epochs to train
     'log_device_placement': False,  # if variable placement has to be logged
-    'train': True,
+    # 'train': True,
     'features_layer': None,
 
     # add evaluation parameters
