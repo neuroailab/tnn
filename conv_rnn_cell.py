@@ -127,7 +127,10 @@ class ConvRNNCell(RNNCell):
 
     def dropout(self, in_layer, dropout=None):
         # with tf.name_scope(name) as scope:
-        drop = tf.nn.dropout(in_layer, dropout, name='dropout')
+        if dropout is None:
+            drop = in_layer
+        else:
+            drop = tf.nn.dropout(in_layer, dropout, name='dropout')
         self._output = drop
         return drop
 
