@@ -23,6 +23,7 @@ num_valid_images = 2**14
 
 params = {
     'seed': None,
+    'thres_loss': 10000,
     # run configuration parameters
     'num_epochs': 90,  # number of epochs to train
     'log_device_placement': False,  # if variable placement has to be logged
@@ -36,27 +37,26 @@ params = {
     'num_valid_batches': num_valid_images // batch_size,  # number of batches used in validation
 
     'saver': {
+        'save': False,
         'dbname': 'bypass-test',
         'collname': 'test',
         'port': 31001,
         'exp_id': 'bypass_15_test',
 
-        # saving path
-        'save_path': restore_var_file + 'output/model',  # file name; # NOTE: if you use another directory make sure it exists first.
-        'save_loss': True,  # Write training loss to file SAVE_PATH + '_loss.csv'
-        'save_loss_freq': 5,  # keeps loss from every SAVE_LOSS_FREQ steps.
-        'save_vars': True,  # save variables if True
-        'save_vars_freq': 3000,  # how often to save vars (divisble by 10)
-        'max_to_keep': 10,
-
+        'save_metrics_freq': 5,  # keeps loss from every SAVE_LOSS_FREQ steps.
+        'save_valid_freq': 3000,
+        'cache_filters_freq': 3000,
+        'cache_path': None,
+        'save_filters_freq': 30000,
+        'tensorboard_dir': None,
         # restoring variables from file
-        'restore_vars': False,  # If True, restores variables from RESTORE_VAR_FILE
-        'start_step': 27000,  # to be used for step counter.
-        'restore_var_file': restore_var_file,  # if SAVE_PATH is given
-                    #  through argparse, RESTORE_VAR_FILE is based on that save_path
+        'restore': False,  # If True, restores variables from RESTORE_VAR_FILE
+        'force_fetch': False,
+        'start_step': 0,  # to be used for step counter.
+        'end_step': None,
 
         # tensorboard
-        'tensorboard': False,  # use tensorboard for graph visualization
+        #'tensorboard': False,  # use tensorboard for graph visualization
                               # (not activations)
         'tensorboard_dir': restore_var_file + 'output',  # save tensorboard graph
     },
@@ -75,23 +75,23 @@ params = {
     'model': {
         # 'num_channels': num_channels,  # RGB, fixed number (see image_processing.py)
         'layer_sizes': {
-            0: {'state': [batch_size, image_size_crop, image_size_crop, num_channels],
+            '0': {'state': [batch_size, image_size_crop, image_size_crop, num_channels],
                 'output': [batch_size, image_size_crop, image_size_crop, num_channels]},
-            1: {'state': [batch_size, image_size_crop // 4, image_size_crop // 4, 96],
+            '1': {'state': [batch_size, image_size_crop // 4, image_size_crop // 4, 96],
                 'output': [batch_size, image_size_crop // 8, image_size_crop // 8, 96]},
-            2: {'state': [batch_size, image_size_crop // 8, image_size_crop // 8, 256],
+            '2': {'state': [batch_size, image_size_crop // 8, image_size_crop // 8, 256],
                 'output': [batch_size, image_size_crop // 16, image_size_crop // 16, 256]},
-            3: {'state': [batch_size, image_size_crop // 16, image_size_crop // 16, 384],
+            '3': {'state': [batch_size, image_size_crop // 16, image_size_crop // 16, 384],
                 'output': [batch_size, image_size_crop // 16, image_size_crop // 16, 384]},
-            4: {'state': [batch_size, image_size_crop // 16, image_size_crop // 16, 384],
+            '4': {'state': [batch_size, image_size_crop // 16, image_size_crop // 16, 384],
                 'output': [batch_size, image_size_crop // 16, image_size_crop // 16, 384]},
-            5: {'state': [batch_size, image_size_crop // 16, image_size_crop // 16, 256],
+            '5': {'state': [batch_size, image_size_crop // 16, image_size_crop // 16, 256],
                 'output': [batch_size, image_size_crop // 32, image_size_crop // 32, 256]},
-            6: {'state': [batch_size, 4096],
+            '6': {'state': [batch_size, 4096],
                 'output': [batch_size, 4096]},
-            7: {'state': [batch_size, 4096],
+            '7': {'state': [batch_size, 4096],
                 'output': [batch_size, 4096]},
-            8: {'state': [batch_size, 1000],
+            '8': {'state': [batch_size, 1000],
                 'output': [batch_size, 1000]}
         },
         # 'layer_sizes': LAYER_SIZES,

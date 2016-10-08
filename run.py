@@ -13,7 +13,7 @@ from tfutils import base, data
 import model
 
 
-def get_data(train=True,
+def get_data(train=False,
              batch_size=256,
              data_path='',
              image_size_crop=224,
@@ -24,7 +24,6 @@ def get_data(train=True,
              T_tot=8
              ):
     # Get images and labels for ImageNet.
-    print('images and labels done')
     if train:
         subslice = range(num_train_images)
     else:
@@ -36,9 +35,24 @@ def get_data(train=True,
                           crop_size=image_size_crop,
                           batch_size=batch_size,
                           n_threads=num_threads)
-    input_seq = [d.batch['data']] * T_tot
-    output_seq = [d.batch['labels']] * T_tot
-    return input_seq, output_seq, d
+    print('images and labels done')
+    return [d.batch] * T_tot, d
+
+
+def get_train_data(**params):
+    return get_data(train=True, **params)
+
+
+def get_valid_data(**params):
+    return get_data(train=False, **params)
+
+
+def get_valid_targets(inputs, outputs, **kwargs):
+    top_1_ops = [tf.nn.in_top_k(output, inp['label'], 1)
+                for inp, output in zip(inputs, outputs)]
+    top_5_ops = [tf.nn.in_top_k(output, label, 5)
+                for output, label in zip(inputs, outputs)]
+    return {'top1': top_1_ops, 'top5': top_5_ops}
 
 
 def get_learning_rate(num_batches_per_epoch=1,
@@ -84,27 +98,8 @@ def get_optimizer(loss, learning_rate=.01, momentum=.9, grad_clip=True):
     return optimizer
 
 
-def main(args):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-g', '--gpu', default='0', type=str)
-    args = parser.parse_args(args[1:])
-
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-
-    from params import params
-    outfile = 'params.json'
-
-    with open(outfile, 'w') as f:
-        json.dump(params, f)
-    # params = json.load(open('params.json'))
-
-    # # dict keys are stored as str; coverting back to int
-    # for k, v in params['model']['layer_sizes'].items():
-    #     params['model']['layer_sizes'][int(k)] = v
-    #     del params['model']['layer_sizes'][k]
-
+def main(params):
     model_func_kwargs = {'model_base': model.alexnet,
-                        #  'train': params['train'],
                          'features_layer': None  # last layer
                          }
     model_func_kwargs.update(params['model'])
@@ -116,28 +111,43 @@ def main(args):
     lr_func_kwargs.update(params['learning_rate'])
 
     # to keep consistent count (of epochs passed, etc.)
-    start_step = params['saver']['start_step'] if params['saver']['restore_vars'] else 0
+    start_step = params['saver']['start_step'] if params['saver']['restore'] else 0
     end_step = params['num_epochs'] * params['num_train_batches']
 
-    base.run(model_func=model.get_model,
-            model_func_kwargs=model_func_kwargs,
-            data_func=get_data,
-            data_func_kwargs=params['data'],
-            loss_func=model.get_loss,
-            loss_func_kwargs=params['loss'],
-            lr_func=get_learning_rate,
-            lr_func_kwargs=lr_func_kwargs,
-            opt_func=get_optimizer,
-            opt_func_kwargs=params['optimizer'],
-            saver_kwargs=params['saver'],
-            train_targets=None,
-            valid_targets=None,
-            seed=params['seed'],
-            start_step=start_step,
-            end_step=end_step,
-            log_device_placement=params['log_device_placement']
-            )
-
+    base.run_base(params,
+             model_func=model.get_model,
+             model_kwargs=model_func_kwargs,
+             train_data_func=get_train_data,
+             train_data_kwargs=params['data'],
+             loss_func=model.get_loss,
+             loss_kwargs=params['loss'],
+             lr_func=get_learning_rate,
+             lr_kwargs=lr_func_kwargs,
+             opt_func=get_optimizer,
+             opt_kwargs=params['optimizer'],
+             saver_kwargs=params['saver'],
+             train_targets_func=None,
+             train_targets_kwargs={},
+             valid_data_func=get_valid_data,
+             valid_data_kwargs={},
+             valid_targets_func=get_valid_data,
+             valid_targets_kwargs={},
+             thres_loss=params['thres_loss'],
+             seed=params['seed'],
+             start_step=start_step,
+             end_step=end_step,
+             log_device_placement=params['log_device_placement']
+             )
 
 if __name__ == '__main__':
-    tf.app.run()
+    params = base.get_params()
+
+    if params is None:
+        from params import params
+        outfile = 'params.json'
+
+        with open(outfile, 'w') as f:
+            json.dump(params, f)
+        params = json.load(open(outfile))
+
+    main(params)

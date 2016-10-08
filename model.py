@@ -149,7 +149,8 @@ def get_model(input_seq,
         raise ValueError('graph not acyclic')
 
     # ensure that T_tot >= shortest_path through graph
-    shortest_path = nx.shortest_path_length(graph, source=0, target=nlayers)
+    shortest_path = nx.shortest_path_length(graph, source='0',
+                                            target=str(nlayers-1))
     if ntimes < shortest_path:
         raise ValueError('T_tot ({}) < shortest path length ({})'.format(T_tot,
                                                                  shortest_path))
@@ -158,7 +159,7 @@ def get_model(input_seq,
     if trim_top:
         _first(graph)
     else:
-        graph.node[0]['first'] = 0  # input matters at t = 0, rest starting t = 1
+        graph.node['inputs']['first'] = 0  # input matters at t = 0, rest starting t = 1
         for node in graph:
             graph.node[node]['first'] = 1
 
@@ -171,12 +172,12 @@ def get_model(input_seq,
     # check inputs: Compares input sequence length with the input length
     # that is needed for output at T_tot. Zero pads or truncates as needed
     # TODO: can this scenario happen?
-    if len(input_seq) > graph.node[0]['last'] + 1:  # more inputs than needed => truncate
-        print('truncating input sequence to length', graph.node[0]['last'] + 1)
-        del input_seq[graph.node[0]['last'] + 1:]
-    elif len(input_seq) < graph.node[0]['last'] + 1:  # too short => pad with zero inputs
-        print('zero-padding input sequence to length', graph.node[0]['last'] + 1)
-        num_needed = (graph.node[0]['last'] + 1) - len(input_seq)  # inputs to add
+    if len(input_seq) > graph.node['0']['last'] + 1:  # more inputs than needed => truncate
+        print('truncating input sequence to length', graph.node['0']['last'] + 1)
+        del input_seq[graph.node['0']['last'] + 1:]
+    elif len(input_seq) < graph.node['0']['last'] + 1:  # too short => pad with zero inputs
+        print('zero-padding input sequence to length', graph.node['0']['last'] + 1)
+        num_needed = (graph.node['0']['last'] + 1) - len(input_seq)  # inputs to add
         if not input_seq:  # need input length of at least one
             raise ValueError('input sequence should not be empty')
         padding = [tf.zeros_like(input_seq[0]) for i in range(0, num_needed)]
@@ -184,16 +185,16 @@ def get_model(input_seq,
 
     # add inputs to outputs dict for layer 0
     # outputs = {layer#: {t1:__, t2:__, ... }}
-    graph.node[0]['inputs'] = None
-    graph.node[0]['outputs'] = input_seq
-    graph.node[0]['initial_states'] = None
-    graph.node[0]['final_states'] = None
+    graph.node['0']['inputs'] = None
+    graph.node['0']['outputs'] = [i['data'] for i in input_seq]
+    graph.node['0']['initial_states'] = None
+    graph.node['0']['final_states'] = None
 
     # create zero initial states if none specified
     # if initial_states is None:
     # zero state returns zeros (tf.float32) based on state size.
     for layer in graph:
-        if layer == 0:
+        if layer == '0':
             st = None
         else:
             st = graph.node[layer]['cell'].zero_state(None, None)
@@ -201,8 +202,8 @@ def get_model(input_seq,
 
     reuse = None if train else True
     # create graph layer by layer
-    for node in graph:
-        if node > 0:
+    for n, node in enumerate(sorted(graph.nodes())):
+        if node != '0':
             layer = graph.node[node]
             with tf.variable_scope(layer['name'], reuse=reuse):
                 print('{:-^80}'.format(layer['name']))
@@ -216,10 +217,10 @@ def get_model(input_seq,
                     # incoming_shape = layer_sizes[j - 1]['output']  # with no bypass
                     # if node == 5 and t == 2: import pdb; pdb.set_trace()
                     if len(layer['cell'].state_size) == 4:
-                        if node == 1:
-                            output_size = input_seq[0].get_shape().as_list()[1]
+                        if n == 1:
+                            output_size = graph.node['0']['outputs'][0].get_shape().as_list()[1]
                         else:
-                            output_size = graph.node[node-1]['cell'].output_size[1]
+                            output_size = graph.node[str(n-1)]['cell'].output_size[1]
 
                         inputs_t = []
                         for parent in sorted(parents):
@@ -265,12 +266,12 @@ def get_model(input_seq,
                 layer['final_states'] = fstate
 
     for node in graph:
-        if node > 0:
+        if node != '0':
             layer = graph.node[node]
             layer['outputs'] = layer['outputs'][layer['first']:layer['last'] + 1]
 
     if features_layer is None:
-        return graph.node[len(layers)]['outputs']
+        return graph.node[str(len(layers))]['outputs']
     else:
         return graph[features_layer]['outputs']
 
@@ -285,23 +286,24 @@ def _construct_graph(layers, layer_sizes, bypasses):
     """
     graph = nx.DiGraph()
     nlayers = len(layer_sizes)
-    graph.add_node(0, cell=None)
+    graph.add_node('0', cell=None)
+    prev_node = '0'
+    names = []
     for node, layer in enumerate(layers):
-        cell = layer(layer_sizes[node + 1]['output'],
-                     layer_sizes[node + 1]['state'])
-        graph.add_node(node + 1, cell=cell, name=cell.scope)
-
-    regular_connections = [(j, j + 1) for j in range(0, nlayers - 1)]
-
-    # add regular connections (aka 1->2, 2->3...)
-    graph.add_edges_from(regular_connections)
+        node = str(node + 1)
+        cell = layer(layer_sizes[node]['output'],
+                     layer_sizes[node]['state'])
+        graph.add_node(node, cell=cell, name=cell.scope)
+        graph.add_edge(str(int(node)-1), node)
 
     #  adjacent layers
-    graph.add_edges_from(bypasses)  # add bypass connections
+    # graph.add_edges_from([(names[i], names[j]) for i,j in bypasses])  # add bypass connections
+    graph.add_edges_from([(str(i), str(j)) for i,j in bypasses])
     print(graph.nodes())
 
     # check that bypasses don't add extraneous nodes
     if len(graph) != nlayers:
+        import pdb; pdb.set_trace()
         raise ValueError('bypasses list created extraneous nodes')
 
     return graph
@@ -315,7 +317,7 @@ def _first(graph):
     :return: dictionary first[j] = time t where layer j matters. j ranges
     from 0 to N_cells + 1
     """
-    curr_layers = [0]
+    curr_layers = ['0']
     t = 0
     while len(curr_layers) > 0:
         next_layers = []
@@ -336,7 +338,7 @@ def _last(graph, ntimes):
     :param T_tot: total number of time steps to run the model.
     :return: dictionary {layer j: last time t}
     """
-    curr_layers = [len(graph) - 1]  # start with output layer
+    curr_layers = [str(len(graph) - 1)]  # start with output layer
     t = ntimes
     while len(curr_layers) > 0:
         next_layers = []  # layers at prev time point
@@ -359,7 +361,6 @@ def _maxpool(input_, out_spatial, kernel_size=None, name='pool'):
     in_spatial = input_.get_shape().as_list()[1]
     stride = in_spatial // out_spatial  # how much to pool by
     if stride < 1:
-        import pdb; pdb.set_trace()
         raise ValueError('spatial dimension of output should not be greater '
                          'than that of input')
     if kernel_size is None:
@@ -372,15 +373,15 @@ def _maxpool(input_, out_spatial, kernel_size=None, name='pool'):
     return pool
 
 
-def get_loss(output_seq, labels_seq, loss_fun=None, time_penalty=1.2):
+def get_loss(inputs, outputs, loss_fun=None, time_penalty=1.2):
     """Calculate total loss (with time penalty)"""
 
     if loss_fun is None:
         loss_fun = tf.nn.sparse_softmax_cross_entropy_with_logits
 
     losses = []
-    for t, (outputs, labels) in enumerate(zip(output_seq, labels_seq)):
-        loss_t = tf.reduce_mean(loss_fun(outputs, labels),
+    for t, (inp, output) in enumerate(zip(inputs, outputs)):
+        loss_t = tf.reduce_mean(loss_fun(output, inp['labels']),
                                 name='xentropy_loss_t{}'.format(t))
         loss_t = loss_t * time_penalty**t
         tf.add_to_collection('losses', loss_t)
