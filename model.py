@@ -91,8 +91,8 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
                 fc = self.fc(inputs, 1000, dropout=None, stddev=.1, bias=.1,
                             init=init_weights)
                 new_state = self.memory(fc, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                return relu, new_state
+                # relu = self.relu(new_state) # no relu in final layer
+                return new_state, new_state
 
     layers = [Conv1, Conv2, Conv3, Conv4, Conv5, FC6, FC7, FC8]
 
@@ -117,7 +117,6 @@ def get_model(input_seq,
               bypass_pool_kernel_size=None):
     """
     Creates model graph and returns logits.
-
     :param layers: Dictionary to construct cells for each layer of the form
      {layer #: ['cell type', {arguments}] Does not include the final linear
      layer used to get logits.
@@ -131,7 +130,6 @@ def get_model(input_seq,
      len(layers) + 1 and _model will output the features of that layer.
     :param initial_states: optional; dict of initial state {layer#: tf Tensor}
     :param num_labels: Size of logits to output [1000 for ImageNet]
-
     :return: Returns a dictionary logits (output of a linear FC layer after
     all layers). {time t: logits} for t >= shortest_path and t < T_total}
     """
@@ -150,7 +148,7 @@ def get_model(input_seq,
 
     # ensure that T_tot >= shortest_path through graph
     shortest_path = nx.shortest_path_length(graph, source='0',
-                                            target=str(nlayers-1))
+                                            target=str(nlayers))
     if ntimes < shortest_path:
         raise ValueError('T_tot ({}) < shortest path length ({})'.format(T_tot,
                                                                  shortest_path))
@@ -159,7 +157,8 @@ def get_model(input_seq,
     if trim_top:
         _first(graph)
     else:
-        graph.node['inputs']['first'] = 0  # input matters at t = 0, rest starting t = 1
+        graph.node['0']['first'] = 0  # input matters at t = 0,
+        # rest starting t = 1
         for node in graph:
             graph.node[node]['first'] = 1
 
@@ -255,20 +254,8 @@ def get_model(input_seq,
                 else:  # if empty, layer j doesn't contribute to output t<= T_tot
                     fstate = layer['initial_states']
 
-                # trim graph- fill in empty outputs with zeros
-                out_first = []
-                for t in range(0, layer['first']):
-                    out_first.append(tf.zeros(shape=layer['cell'].output_size,
-                                              dtype=tf.float32))
-                out = out_first + out
-
                 layer['outputs'] = out
                 layer['final_states'] = fstate
-
-    for node in graph:
-        if node != '0':
-            layer = graph.node[node]
-            layer['outputs'] = layer['outputs'][layer['first']:layer['last'] + 1]
 
     if features_layer is None:
         return graph.node[str(len(layers))]['outputs']
@@ -354,7 +341,6 @@ def _last(graph, ntimes):
 def _maxpool(input_, out_spatial, kernel_size=None, name='pool'):
     """
     Returns a tf operation for maxpool of input
-
     Stride determined by the spatial size ratio of output and input
     kernel_size = None will set kernel_size same as stride.
     """
