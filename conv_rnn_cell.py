@@ -29,7 +29,6 @@ class ConvRNNCell(RNNCell):
 
     def zero_state(self, batch_size, dtype):
         """Return zero-filled state tensor
-
         Args:
             batch_size: int, float, or unit Tensor representing the batch size.
             dtype: the data type to use for the state.
@@ -87,14 +86,17 @@ class ConvRNNCell(RNNCell):
         self._output = lrn
         return lrn
 
-    def memory(self, in_layer, state, memory_decay=0, trainable=False):
-        initializer = tf.constant_initializer(value=memory_decay)
-        mem = tf.get_variable(initializer=initializer,
-                              shape=1,
-                              trainable=trainable,
-                              name='decay_param')
-        decay_factor = tf.sigmoid(mem)
-        new_state = tf.mul(state, decay_factor) + in_layer
+    def memory(self, in_layer, state, memory_decay=None, trainable=False):
+        if memory_decay is not None:
+            initializer = tf.constant_initializer(value=memory_decay)
+            mem = tf.get_variable(initializer=initializer,
+                                  shape=1,
+                                  trainable=trainable,
+                                  name='decay_param')
+            decay_factor = tf.sigmoid(mem)
+            new_state = tf.mul(state, decay_factor) + in_layer
+        else:
+            new_state = state
         self._state = new_state
         return new_state
 
