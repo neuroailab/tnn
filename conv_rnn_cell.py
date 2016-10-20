@@ -6,25 +6,21 @@ from tensorflow.python.ops.rnn_cell import RNNCell
 
 class ConvRNNCell(RNNCell):
 
-    def __init__(self, output_size, state_size, scope=None):
+    def __init__(self, batch_size,  scope=None):
         self.scope = type(self).__name__ if scope is None else scope
         # self.seed = seed
         # outputs, new_state = self.__call__(inputs, state=None)
-        # self._output_size = outputs.get_shape.as_list()
-        # self._state_size = new_state.get_shape.as_list()
-        self._output_size = output_size
-        self._state_size = state_size
+        self.batch_size = batch_size
+
+    def __call__(self, inputs, state=None):
+        raise NotImplementedError
 
     @property
     def state_size(self):
-        # actual state size.
-        return self._state_size
+        raise NotImplementedError
 
     @property
     def output_size(self):
-        return self._output_size
-
-    def __call__(self, inputs, state=None):
         raise NotImplementedError
 
     def zero_state(self, batch_size, dtype):
