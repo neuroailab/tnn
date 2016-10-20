@@ -74,25 +74,7 @@ params = {
 
     'model': {
         # 'num_channels': num_channels,  # RGB, fixed number (see image_processing.py)
-        'layer_sizes': {
-            '0': {'state': [batch_size, image_size_crop, image_size_crop, num_channels],
-                'output': [batch_size, image_size_crop, image_size_crop, num_channels]},
-            '1': {'state': [batch_size, image_size_crop // 4, image_size_crop // 4, 96],
-                'output': [batch_size, image_size_crop // 8, image_size_crop // 8, 96]},
-            '2': {'state': [batch_size, image_size_crop // 8, image_size_crop // 8, 256],
-                'output': [batch_size, image_size_crop // 16, image_size_crop // 16, 256]},
-            '3': {'state': [batch_size, image_size_crop // 16, image_size_crop // 16, 384],
-                'output': [batch_size, image_size_crop // 16, image_size_crop // 16, 384]},
-            '4': {'state': [batch_size, image_size_crop // 16, image_size_crop // 16, 384],
-                'output': [batch_size, image_size_crop // 16, image_size_crop // 16, 384]},
-            '5': {'state': [batch_size, image_size_crop // 16, image_size_crop // 16, 256],
-                'output': [batch_size, image_size_crop // 32, image_size_crop // 32, 256]},
-            '6': {'state': [batch_size, 4096],
-                'output': [batch_size, 4096]},
-            '7': {'state': [batch_size, 4096],
-                'output': [batch_size, 4096]},
-            '8': {'state': [batch_size, 1000],
-                'output': [batch_size, 1000]}
+        # todo - specify alexnet?
         },
         # 'layer_sizes': LAYER_SIZES,
         'weight_decay': .0005,  # None for no decay
