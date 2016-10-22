@@ -11,20 +11,20 @@ from conv_rnn_cell import ConvRNNCell
 
 
 def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
-            init_weights='xavier', train=True):
+            init_weights='xavier', train=True, input_spatial_size=224):
     dropout = dropout if train else None
-    image_size_crop = 227
 
     ## make initial image size also a parameter? so we can define
     # layer spatial sizes in terms of it.
 
     class Conv1(ConvRNNCell):
         def __init__(self, *args, **kwargs):
+            # does this even work
             super(Conv1, self).__init__(*args, **kwargs)
-            self._state_size = [self.batch_size, image_size_crop // 4,
-                                image_size_crop // 4, 96]
-            self._output_size = [self.batch_size, image_size_crop // 8,
-                                 image_size_crop // 8, 96]
+            self._state_size = [self.batch_size, input_spatial_size // 4,
+                                input_spatial_size // 4, 96]
+            self._output_size = [self.batch_size, input_spatial_size // 8,
+                                 input_spatial_size // 8, 96]
 
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
@@ -47,10 +47,10 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
     class Conv2(ConvRNNCell):
         def __init__(self, *args, **kwargs):
             super(Conv2, self).__init__(*args, **kwargs)
-            self._state_size = [self.batch_size, image_size_crop // 8,
-                                image_size_crop // 8, 256]
-            self._output_size = [self.batch_size, image_size_crop // 16,
-                                 image_size_crop // 16, 256]
+            self._state_size = [self.batch_size, input_spatial_size // 8,
+                                input_spatial_size // 8, 256]
+            self._output_size = [self.batch_size, input_spatial_size // 16,
+                                 input_spatial_size // 16, 256]
 
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
@@ -73,10 +73,10 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
     class Conv3(ConvRNNCell):
         def __init__(self, *args, **kwargs):
             super(Conv3, self).__init__(*args, **kwargs)
-            self._state_size = [self.batch_size, image_size_crop // 16,
-                                image_size_crop // 16, 384]
-            self._output_size = [self.batch_size, image_size_crop // 16,
-                                 image_size_crop // 16, 384]
+            self._state_size = [self.batch_size, input_spatial_size // 16,
+                                input_spatial_size // 16, 384]
+            self._output_size = [self.batch_size, input_spatial_size // 16,
+                                 input_spatial_size // 16, 384]
 
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
@@ -97,10 +97,10 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
     class Conv4(ConvRNNCell):
         def __init__(self, *args, **kwargs):
             super(Conv4, self).__init__(*args, **kwargs)
-            self._state_size = [self.batch_size, image_size_crop // 16,
-                                image_size_crop // 16, 384]
-            self._output_size = [self.batch_size, image_size_crop // 16,
-                                 image_size_crop // 16, 384]
+            self._state_size = [self.batch_size, input_spatial_size // 16,
+                                input_spatial_size // 16, 384]
+            self._output_size = [self.batch_size, input_spatial_size // 16,
+                                 input_spatial_size // 16, 384]
 
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
@@ -121,10 +121,10 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
     class Conv5(ConvRNNCell):
         def __init__(self, *args, **kwargs):
             super(Conv5, self).__init__(*args, **kwargs)
-            self._state_size = [self.batch_size, image_size_crop // 16,
-                                image_size_crop // 16, 256]
-            self._output_size = [self.batch_size, image_size_crop // 32,
-                                 image_size_crop // 32, 256]
+            self._state_size = [self.batch_size, input_spatial_size // 16,
+                                input_spatial_size // 16, 256]
+            self._output_size = [self.batch_size, input_spatial_size // 32,
+                                 input_spatial_size // 32, 256]
 
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
@@ -232,7 +232,8 @@ def get_model(input_seq,
               trim_bottom=True,
               features_layer=None,
               bypass_pool_kernel_size=None,
-              batch_size=None):
+              batch_size=None,
+              input_spatial_size=None):
     """
     Creates model graph and returns logits.
     :param layers: Dictionary to construct cells for each layer of the form
@@ -252,7 +253,8 @@ def get_model(input_seq,
 
     # create networkx graph with layer #s as nodes
     layers = model_base(weight_decay=weight_decay, memory_decay=memory_decay,
-                        dropout=dropout, init_weights=init_weights, train=train)
+                        dropout=dropout, init_weights=init_weights,
+                        train=train, input_spatial_size=input_spatial_size)
     graph = _construct_graph(layers, bypasses, batch_size)
 
     nlayers = len(layers)  # number of layers including the final FC/logits
