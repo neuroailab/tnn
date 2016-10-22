@@ -14,10 +14,18 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
             init_weights='xavier', train=True):
     dropout = dropout if train else None
     image_size_crop = 227
+
     ## make initial image size also a parameter? so we can define
     # layer spatial sizes in terms of it.
 
     class Conv1(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv1, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, image_size_crop // 4,
+                                image_size_crop // 4, 96]
+            self._output_size = [self.batch_size, image_size_crop // 8,
+                                 image_size_crop // 8, 96]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
             conv = self.conv(inputs, 96, 11, 4, stddev=.1, bias=.1,
@@ -30,162 +38,178 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
 
         @property
         def state_size(self):
-            # actual state size.
-            self._state_size = [self.batch_size, image_size_crop // 4,
-                                image_size_crop // 4, 96]
             return self._state_size
 
         @property
         def output_size(self):
-            self._output_size = [self.batch_size, image_size_crop // 8,
-                               image_size_crop // 8, 96]
             return self._output_size
 
     class Conv2(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv2, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, image_size_crop // 8,
+                                image_size_crop // 8, 256]
+            self._output_size = [self.batch_size, image_size_crop // 16,
+                                 image_size_crop // 16, 256]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                conv = self.conv(inputs, 256, 5, 1, stddev=.1, bias=.1,
-                                 init=init_weights, weight_decay=weight_decay)
-                norm = self.lrn(conv)
-                new_state = self.memory(norm, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                pool = self.pool(relu, 3, 2)
-                return pool, new_state
+            conv = self.conv(inputs, 256, 5, 1, stddev=.1, bias=.1,
+                             init=init_weights, weight_decay=weight_decay)
+            norm = self.lrn(conv)
+            new_state = self.memory(norm, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            pool = self.pool(relu, 3, 2)
+            return pool, new_state
 
         @property
         def state_size(self):
-            self._state_size = [self.batch_size, image_size_crop // 8,
-                                image_size_crop // 8, 256]
             return self._state_size
 
         @property
         def output_size(self):
-            self.output_size = [self.batch_size, image_size_crop // 16,
-                                image_size_crop // 16, 256],
             return self._output_size
 
     class Conv3(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv3, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, image_size_crop // 16,
+                                image_size_crop // 16, 384]
+            self._output_size = [self.batch_size, image_size_crop // 16,
+                                 image_size_crop // 16, 384]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
-                                 init=init_weights, weight_decay=weight_decay)
-                new_state = self.memory(conv, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                return relu, new_state
+            conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
+                             init=init_weights, weight_decay=weight_decay)
+            new_state = self.memory(conv, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            return relu, new_state
 
         @property
         def state_size(self):
-            self._state_size = [self.batch_size, image_size_crop // 16,
-                                image_size_crop // 16, 384]
             return self._state_size
 
         @property
         def output_size(self):
-            self.output_size = [self.batch_size, image_size_crop // 16,
-                                image_size_crop // 16, 384],
             return self._output_size
 
     class Conv4(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv4, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, image_size_crop // 16,
+                                image_size_crop // 16, 384]
+            self._output_size = [self.batch_size, image_size_crop // 16,
+                                 image_size_crop // 16, 384]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
-                                init=init_weights, weight_decay=weight_decay)
-                new_state = self.memory(conv, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                return relu, new_state
+            conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
+                             init=init_weights, weight_decay=weight_decay)
+            new_state = self.memory(conv, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            return relu, new_state
 
         @property
         def state_size(self):
-            self._state_size = [self.batch_size, image_size_crop // 16,
-                               image_size_crop // 16, 384]
             return self._state_size
 
         @property
         def output_size(self):
-            self.output_size = [self.batch_size, image_size_crop // 16,
-                                image_size_crop // 16, 384]
             return self._output_size
 
     class Conv5(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv5, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, image_size_crop // 16,
+                                image_size_crop // 16, 256]
+            self._output_size = [self.batch_size, image_size_crop // 32,
+                                 image_size_crop // 32, 256]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                conv = self.conv(inputs, 256, 3, 1, stddev=.1, bias=.1,
-                                 init=init_weights, weight_decay=weight_decay)
-                new_state = self.memory(conv, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                pool = self.pool(relu, 3, 2)
-                return pool, new_state
+            conv = self.conv(inputs, 256, 3, 1, stddev=.1, bias=.1,
+                             init=init_weights, weight_decay=weight_decay)
+            new_state = self.memory(conv, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            pool = self.pool(relu, 3, 2)
+            return pool, new_state
 
         @property
         def state_size(self):
-            self._state_size = [self.batch_size, image_size_crop // 16,
-                                image_size_crop // 16, 256]
             return self._state_size
 
         @property
         def output_size(self):
-            self.output_size = [self.batch_size, image_size_crop // 32,
-                                image_size_crop // 32, 256]
             return self._output_size
 
     class FC6(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(FC6, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, 4096]
+            self._output_size = [self.batch_size, 4096]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                resh = tf.reshape(inputs, [inputs.get_shape().as_list()[0], -1])
-                fc = self.fc(resh, 4096, dropout=dropout, stddev=.1, bias=.1,
-                            init=init_weights)
-                new_state = self.memory(fc, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                drop = self.dropout(relu, dropout=dropout)
-                return drop, new_state
+            resh = tf.reshape(inputs, [inputs.get_shape().as_list()[0], -1])
+            fc = self.fc(resh, 4096, dropout=dropout, stddev=.1, bias=.1,
+                         init=init_weights)
+            new_state = self.memory(fc, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            drop = self.dropout(relu, dropout=dropout)
+            return drop, new_state
 
         @property
         def state_size(self):
-            self._state_size = [self.batch_size, 4096]
             return self._state_size
 
         @property
         def output_size(self):
-            self.output_size = [self.batch_size, 4096]
             return self._output_size
 
     class FC7(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(FC7, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, 4096]
+            self._output_size = [self.batch_size, 4096]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                fc = self.fc(inputs, 4096, dropout=dropout, stddev=.1, bias=.1,
-                            init=init_weights)
-                new_state = self.memory(fc, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                drop = self.dropout(relu, dropout=dropout)
-                return drop, new_state
+            fc = self.fc(inputs, 4096, dropout=dropout, stddev=.1, bias=.1,
+                         init=init_weights)
+            new_state = self.memory(fc, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            drop = self.dropout(relu, dropout=dropout)
+            return drop, new_state
 
         @property
         def state_size(self):
-            self._state_size = [self.batch_size, 4096]
             return self._state_size
 
         @property
         def output_size(self):
-            self.output_size = [self.batch_size, 4096]
             return self._output_size
 
     class FC8(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(FC8, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, 1000]
+            self._output_size = [self.batch_size, 1000]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                fc = self.fc(inputs, 1000, dropout=None, stddev=.1, bias=.1,
-                            init=init_weights)
-                new_state = self.memory(fc, state, memory_decay=memory_decay)
-                # relu = self.relu(new_state) # no relu in final layer
-                return new_state, new_state
+            fc = self.fc(inputs, 1000, dropout=None, stddev=.1, bias=.1,
+                         init=init_weights)
+            new_state = self.memory(fc, state, memory_decay=memory_decay)
+            # relu = self.relu(new_state) # no relu in final layer
+            return new_state, new_state
 
         @property
         def state_size(self):
-            self._state_size = [self.batch_size, 1000]
             return self._state_size
 
         @property
         def output_size(self):
-            self.output_size = [self.batch_size, 1000]
             return self._output_size
 
     layers = [Conv1, Conv2, Conv3, Conv4, Conv5, FC6, FC7, FC8]
