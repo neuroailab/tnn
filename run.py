@@ -100,8 +100,8 @@ def get_optimizer(loss, learning_rate=.01, momentum=.9, grad_clip=True):
 
 def main(params):
     model_func_kwargs = {'model_base': model.alexnet,
-                         'features_layer': None,  # last layer
-                         'batch_size': params['data']['batch_size']}
+                         'features_layer': None # last layer
+                         }
     model_func_kwargs.update(params['model'])
 
     data_func_kwargs = {'T_tot': params['model']['T_tot']}
