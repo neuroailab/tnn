@@ -74,7 +74,8 @@ params = {
 
     'model': {
         # 'num_channels': num_channels,  # RGB, fixed number (see image_processing.py)
-        # todo - specify alexnet?
+        'batch_size': batch_size,
+        'input_spatial_size': image_size_crop
         },
         # 'layer_sizes': LAYER_SIZES,
         'weight_decay': .0005,  # None for no decay
