@@ -8,7 +8,7 @@ import os, json
 
 host = os.uname()[1]
 if host.startswith('node') or host == 'openmind7':  # OpenMind
-    # DATA_PATH = '/mindhive/dicarlolab/common/imagenet/data.raw'
+    # data_path = '/mindhive/dicarlolab/common/imagenet/data.raw'
     data_path = '/om/user/qbilius/imagenet/data.raw'
     restore_var_file = '/mindhive/dicarlolab/u/qbilius/computed/bypass_test/'
 else:  # agents
@@ -48,7 +48,6 @@ params = {
         'cache_filters_freq': 3000,
         'cache_path': None,
         'save_filters_freq': 30000,
-        'tensorboard_dir': None,
         # restoring variables from file
         'restore': False,  # If True, restores variables from RESTORE_VAR_FILE
         'force_fetch': False,
@@ -58,25 +57,28 @@ params = {
         # tensorboard
         #'tensorboard': False,  # use tensorboard for graph visualization
                               # (not activations)
-        'tensorboard_dir': restore_var_file + 'output',  # save tensorboard graph
+        'tensorboard_dir': restore_var_file + 'output'  # save tensorboard graph
+        # (None to not save tensorboard)
     },
 
     'data': {  # image parameters
         'data_path': data_path,  # path to image database
         'image_size_crop': image_size_crop,  # size after cropping an image
+        'input_seq_len': 1,  # length of input sequence
+
         'random_crop': True,  # only relevant during training
         # 'num_labels': 1000,  # number of unique labels in the dataset
         'num_threads': 4,  # per tower
         'batch_size': batch_size,  # to be split among GPUs. For train, eval
         'num_train_images': num_train_images,
-        'num_valid_images': num_valid_images,
+        'num_valid_images': num_valid_images
     },
 
     'model': {
+        'model_base': 'alexnet',
         # 'num_channels': num_channels,  # RGB, fixed number (see image_processing.py)
         'batch_size': batch_size,
-        'input_spatial_size': image_size_crop
-        },
+        'input_spatial_size': image_size_crop,
         # 'layer_sizes': LAYER_SIZES,
         'weight_decay': .0005,  # None for no decay
         'init_weights': 'xavier',
@@ -86,14 +88,11 @@ params = {
                            # -1.1 initialize decay_factor t= sigmoid(-1.1) = 0.25
 
         # bypass parameters
-        'T_tot': 8,  # Total number of time steps to run model
-            # Note: if all of input is  desired to be run; then T = length(input) +
-            # N_cells + 1. Otherwise, T >= shortest path is given and input is
-            # truncated to length = T - shortest_path
         # 'layers': LAYERS,
         'bypasses': [(1,5)],  # bypasses: list of tuples (from, to)
         # 'initial_states': None,  # dictionary of initial states for cells
-        # 'input_seq': None,  # Sequence of input images. If None, just repeats input image
+        # 'input_seq': None,  # Sequence of input images. If None, just repeats input
+
         'trim_top': True,
         'trim_bottom': True,  # might not need to use, since we don't expect that
             # bottom nodes that don't contribute to final loss will matter. And we also
