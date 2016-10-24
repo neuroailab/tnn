@@ -21,7 +21,7 @@ def get_data(train=False,
              num_valid_images=2**14,
              num_threads=4,
              random_crop=True,
-             T_tot=8
+             input_seq_len=1
              ):
     # Get images and labels for ImageNet.
     if train:
@@ -36,7 +36,7 @@ def get_data(train=False,
                           batch_size=batch_size,
                           n_threads=num_threads)
     print('images and labels done')
-    return [d.batch] * T_tot, d
+    return [d.batch] * input_seq_len, d
 
 
 def get_train_data(**params):
@@ -99,13 +99,13 @@ def get_optimizer(loss, learning_rate=.01, momentum=.9, grad_clip=True):
 
 
 def main(params):
-    model_func_kwargs = {'model_base': model.alexnet,
+    model_func_kwargs = {#'model_base': model.alexnet,
                          'features_layer': None # last layer
                          }
     model_func_kwargs.update(params['model'])
 
-    data_func_kwargs = {'T_tot': params['model']['T_tot']}
-    data_func_kwargs.update(params['data'])
+    # data_func_kwargs = {'T_tot': params['model']['T_tot']}
+    # data_func_kwargs.update(params['data'])  # never used..
 
     lr_func_kwargs = {'num_batches_per_epoch': params['num_train_batches']}
     lr_func_kwargs.update(params['learning_rate'])
