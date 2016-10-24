@@ -11,88 +11,202 @@ from conv_rnn_cell import ConvRNNCell
 
 
 def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
-            init_weights='xavier', train=True):
+            init_weights='xavier', train=True, input_spatial_size=224):
     dropout = dropout if train else None
 
     class Conv1(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv1, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, input_spatial_size // 4,
+                                input_spatial_size // 4, 96]
+            self._output_size = [self.batch_size, input_spatial_size // 8,
+                                 input_spatial_size // 8, 96]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                conv = self.conv(inputs, 96, 11, 4, stddev=.1, bias=.1,
-                                 init=init_weights, weight_decay=weight_decay)
-                norm = self.lrn(conv)
-                new_state = self.memory(norm, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                pool = self.pool(relu, 3, 2)
-                return pool, new_state
+            conv = self.conv(inputs, 96, 11, 4, stddev=.1, bias=.1,
+                             init=init_weights, weight_decay=weight_decay)
+            norm = self.lrn(conv)
+            new_state = self.memory(norm, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            pool = self.pool(relu, 3, 2)
+            return pool, new_state
+
+        @property
+        def state_size(self):
+            return self._state_size
+
+        @property
+        def output_size(self):
+            return self._output_size
 
     class Conv2(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv2, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, input_spatial_size // 8,
+                                input_spatial_size // 8, 256]
+            self._output_size = [self.batch_size, input_spatial_size // 16,
+                                 input_spatial_size // 16, 256]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                conv = self.conv(inputs, 256, 5, 1, stddev=.1, bias=.1,
-                                 init=init_weights, weight_decay=weight_decay)
-                norm = self.lrn(conv)
-                new_state = self.memory(norm, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                pool = self.pool(relu, 3, 2)
-                return pool, new_state
+            conv = self.conv(inputs, 256, 5, 1, stddev=.1, bias=.1,
+                             init=init_weights, weight_decay=weight_decay)
+            norm = self.lrn(conv)
+            new_state = self.memory(norm, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            pool = self.pool(relu, 3, 2)
+            return pool, new_state
+
+        @property
+        def state_size(self):
+            return self._state_size
+
+        @property
+        def output_size(self):
+            return self._output_size
 
     class Conv3(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv3, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, input_spatial_size // 16,
+                                input_spatial_size // 16, 384]
+            self._output_size = [self.batch_size, input_spatial_size // 16,
+                                 input_spatial_size // 16, 384]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
-                                 init=init_weights, weight_decay=weight_decay)
-                new_state = self.memory(conv, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                return relu, new_state
+            conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
+                             init=init_weights, weight_decay=weight_decay)
+            new_state = self.memory(conv, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            return relu, new_state
+
+        @property
+        def state_size(self):
+            return self._state_size
+
+        @property
+        def output_size(self):
+            return self._output_size
 
     class Conv4(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv4, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, input_spatial_size // 16,
+                                input_spatial_size // 16, 384]
+            self._output_size = [self.batch_size, input_spatial_size // 16,
+                                 input_spatial_size // 16, 384]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
-                                init=init_weights, weight_decay=weight_decay)
-                new_state = self.memory(conv, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                return relu, new_state
+            conv = self.conv(inputs, 384, 3, 1, stddev=.1, bias=.1,
+                             init=init_weights, weight_decay=weight_decay)
+            new_state = self.memory(conv, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            return relu, new_state
+
+        @property
+        def state_size(self):
+            return self._state_size
+
+        @property
+        def output_size(self):
+            return self._output_size
 
     class Conv5(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(Conv5, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, input_spatial_size // 16,
+                                input_spatial_size // 16, 256]
+            self._output_size = [self.batch_size, input_spatial_size // 32,
+                                 input_spatial_size // 32, 256]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                conv = self.conv(inputs, 256, 3, 1, stddev=.1, bias=.1,
-                                 init=init_weights, weight_decay=weight_decay)
-                new_state = self.memory(conv, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                pool = self.pool(relu, 3, 2)
-                return pool, new_state
+            conv = self.conv(inputs, 256, 3, 1, stddev=.1, bias=.1,
+                             init=init_weights, weight_decay=weight_decay)
+            new_state = self.memory(conv, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            pool = self.pool(relu, 3, 2)
+            return pool, new_state
+
+        @property
+        def state_size(self):
+            return self._state_size
+
+        @property
+        def output_size(self):
+            return self._output_size
 
     class FC6(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(FC6, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, 4096]
+            self._output_size = [self.batch_size, 4096]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                resh = tf.reshape(inputs, [inputs.get_shape().as_list()[0], -1])
-                fc = self.fc(resh, 4096, dropout=dropout, stddev=.1, bias=.1,
-                            init=init_weights)
-                new_state = self.memory(fc, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                drop = self.dropout(relu, dropout=dropout)
-                return drop, new_state
+            resh = tf.reshape(inputs, [inputs.get_shape().as_list()[0], -1])
+            fc = self.fc(resh, 4096, dropout=dropout, stddev=.1, bias=.1,
+                         init=init_weights)
+            new_state = self.memory(fc, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            drop = self.dropout(relu, dropout=dropout)
+            return drop, new_state
+
+        @property
+        def state_size(self):
+            return self._state_size
+
+        @property
+        def output_size(self):
+            return self._output_size
 
     class FC7(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(FC7, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, 4096]
+            self._output_size = [self.batch_size, 4096]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                fc = self.fc(inputs, 4096, dropout=dropout, stddev=.1, bias=.1,
-                            init=init_weights)
-                new_state = self.memory(fc, state, memory_decay=memory_decay)
-                relu = self.relu(new_state)
-                drop = self.dropout(relu, dropout=dropout)
-                return drop, new_state
+            fc = self.fc(inputs, 4096, dropout=dropout, stddev=.1, bias=.1,
+                         init=init_weights)
+            new_state = self.memory(fc, state, memory_decay=memory_decay)
+            relu = self.relu(new_state)
+            drop = self.dropout(relu, dropout=dropout)
+            return drop, new_state
+
+        @property
+        def state_size(self):
+            return self._state_size
+
+        @property
+        def output_size(self):
+            return self._output_size
 
     class FC8(ConvRNNCell):
+        def __init__(self, *args, **kwargs):
+            super(FC8, self).__init__(*args, **kwargs)
+            self._state_size = [self.batch_size, 1000]
+            self._output_size = [self.batch_size, 1000]
+
         def __call__(self, inputs, state):
             # with tf.variable_scope(type(self).__name__, reuse=True):
-                fc = self.fc(inputs, 1000, dropout=None, stddev=.1, bias=.1,
-                            init=init_weights)
-                new_state = self.memory(fc, state, memory_decay=memory_decay)
-                # relu = self.relu(new_state) # no relu in final layer
-                return new_state, new_state
+            fc = self.fc(inputs, 1000, dropout=None, stddev=.1, bias=.1,
+                         init=init_weights)
+            new_state = self.memory(fc, state, memory_decay=memory_decay)
+            # relu = self.relu(new_state) # no relu in final layer
+            return new_state, new_state
+
+        @property
+        def state_size(self):
+            return self._state_size
+
+        @property
+        def output_size(self):
+            return self._output_size
 
     layers = [Conv1, Conv2, Conv3, Conv4, Conv5, FC6, FC7, FC8]
 
@@ -103,8 +217,6 @@ def get_model(input_seq,
               model_base=None,
               train=False,
               bypasses=[],
-              layer_sizes=None,
-              T_tot=8,
               init_weights='xavier',
               weight_decay=None,
               dropout=None,
@@ -114,17 +226,17 @@ def get_model(input_seq,
               trim_top=True,
               trim_bottom=True,
               features_layer=None,
-              bypass_pool_kernel_size=None):
+              bypass_pool_kernel_size=None,
+              batch_size=None,
+              input_spatial_size=None):
     """
     Creates model graph and returns logits.
+    model_base: string name of model base. (Ex: 'alexnet')
     :param layers: Dictionary to construct cells for each layer of the form
      {layer #: ['cell type', {arguments}] Does not include the final linear
      layer used to get logits.
-    :param layer_sizes: Dictionary of dictionaries containing state and
-     output sizes for each layer
     :param bypasses: list of tuples (from, to)
     :param input_seq: list for sequence of input images as tf Tensors
-    :param T_tot: total number of time steps to run the model.
     :param features_layer: if None (equivalent to a value of len(layers) + 1) ,
      outputs logitsfrom last FC. Otherwise, accepts a number 0 through
      len(layers) + 1 and _model will output the features of that layer.
@@ -135,23 +247,23 @@ def get_model(input_seq,
     """
 
     # create networkx graph with layer #s as nodes
-    layers = model_base(weight_decay=weight_decay, memory_decay=memory_decay,
-                        dropout=dropout, init_weights=init_weights, train=train)
-    graph = _construct_graph(layers, layer_sizes, bypasses)
+    if model_base == 'alexnet':
+        mb = alexnet
+    else:
+        mb = None
+    layers = mb(weight_decay=weight_decay, memory_decay=memory_decay,
+                        dropout=dropout, init_weights=init_weights,
+                        train=train, input_spatial_size=input_spatial_size)
+    graph = _construct_graph(layers, bypasses, batch_size)
 
     nlayers = len(layers)  # number of layers including the final FC/logits
-    ntimes = len(input_seq)
+    shortest_path = nx.shortest_path_length(graph, source='0',
+                                            target=str(nlayers))
+    ntimes = len(input_seq) + shortest_path - 1  # total num. of time steps
 
     # ensure that graph is acyclic
     if not nx.is_directed_acyclic_graph(graph):
         raise ValueError('graph not acyclic')
-
-    # ensure that T_tot >= shortest_path through graph
-    shortest_path = nx.shortest_path_length(graph, source='0',
-                                            target=str(nlayers))
-    if ntimes < shortest_path:
-        raise ValueError('T_tot ({}) < shortest path length ({})'.format(T_tot,
-                                                                 shortest_path))
 
     # get first and last time points where layers matter
     if trim_top:
@@ -168,19 +280,20 @@ def get_model(input_seq,
         for node in graph:
             graph.node[node]['last'] = ntimes
 
-    # check inputs: Compares input sequence length with the input length
-    # that is needed for output at T_tot. Zero pads or truncates as needed
-    # TODO: can this scenario happen?
-    if len(input_seq) > graph.node['0']['last'] + 1:  # more inputs than needed => truncate
-        print('truncating input sequence to length', graph.node['0']['last'] + 1)
-        del input_seq[graph.node['0']['last'] + 1:]
-    elif len(input_seq) < graph.node['0']['last'] + 1:  # too short => pad with zero inputs
-        print('zero-padding input sequence to length', graph.node['0']['last'] + 1)
-        num_needed = (graph.node['0']['last'] + 1) - len(input_seq)  # inputs to add
-        if not input_seq:  # need input length of at least one
-            raise ValueError('input sequence should not be empty')
-        padding = [tf.zeros_like(input_seq[0]) for i in range(0, num_needed)]
-        input_seq.extend(padding)
+    # # check inputs: Compares input sequence length with the input length
+    # # that is needed for output at T_tot. Zero pads or truncates as needed
+    # # TODO: can this scenario happen?
+    # if len(input_seq) > graph.node['0']['last'] + 1:  # more inputs than needed => truncate
+    #     print('truncating input sequence to length', graph.node['0']['last'] + 1)
+    #     del input_seq[graph.node['0']['last'] + 1:]
+    # elif len(input_seq) < graph.node['0']['last'] + 1:  # too short => pad with zero inputs
+    #     print('zero-padding input sequence to length', graph.node['0']['last'] + 1)
+    #     num_needed = (graph.node['0']['last'] + 1) - len(input_seq)  # inputs to add
+    #     if not input_seq:  # need input length of at least one
+    #         raise ValueError('input sequence should not be empty')
+    #     padding = [{'data': tf.zeros_like(input_seq[0]['data'])}
+    #                for i in range(0, num_needed)]
+    #     input_seq.extend(padding)
 
     # add inputs to outputs dict for layer 0
     # outputs = {layer#: {t1:__, t2:__, ... }}
@@ -254,8 +367,22 @@ def get_model(input_seq,
                 else:  # if empty, layer j doesn't contribute to output t<= T_tot
                     fstate = layer['initial_states']
 
+                # fill in empty outputs with zeros since we index by t
+                out_first = []
+                for t in range(0, layer['first']):
+                    out_first.append(
+                        tf.zeros(shape=layer['cell'].output_size,
+                                 dtype=tf.float32))
+                out = out_first + out
+
                 layer['outputs'] = out
                 layer['final_states'] = fstate
+
+    for node in graph:
+        if node != '0':
+            layer = graph.node[node]
+            layer['outputs'] = layer['outputs'][
+                               layer['first']:layer['last'] + 1]
 
     if features_layer is None:
         return graph.node[str(len(layers))]['outputs']
@@ -263,7 +390,7 @@ def get_model(input_seq,
         return graph[features_layer]['outputs']
 
 
-def _construct_graph(layers, layer_sizes, bypasses):
+def _construct_graph(layers, bypasses, batch_size):
     """
     Constructs networkx DiGraph based on bypass connections
     :param bypasses: list of tuples (from, to)
@@ -272,14 +399,13 @@ def _construct_graph(layers, layer_sizes, bypasses):
     from 0 (input) to N_cells + 1 (last FC layer for logits)
     """
     graph = nx.DiGraph()
-    nlayers = len(layer_sizes)
+    nlayers = len(layers)
     graph.add_node('0', cell=None)
     prev_node = '0'
     names = []
     for node, layer in enumerate(layers):
         node = str(node + 1)
-        cell = layer(layer_sizes[node]['output'],
-                     layer_sizes[node]['state'])
+        cell = layer(batch_size) ## only need to specify batch size
         graph.add_node(node, cell=cell, name=cell.scope)
         graph.add_edge(str(int(node)-1), node)
 
@@ -289,7 +415,7 @@ def _construct_graph(layers, layer_sizes, bypasses):
     print(graph.nodes())
 
     # check that bypasses don't add extraneous nodes
-    if len(graph) != nlayers:
+    if len(graph) != nlayers + 1:
         import pdb; pdb.set_trace()
         raise ValueError('bypasses list created extraneous nodes')
 
@@ -322,7 +448,7 @@ def _last(graph, ntimes):
     last time t where layer j information reaches output layer at, before T_tot
     Note last[0] >= 0, for input layer
     :param graph: networkx graph representing model
-    :param T_tot: total number of time steps to run the model.
+    :param ntimes: total number of time steps to run the model.
     :return: dictionary {layer j: last time t}
     """
     curr_layers = [str(len(graph) - 1)]  # start with output layer
