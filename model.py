@@ -14,12 +14,8 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
             init_weights='xavier', train=True, input_spatial_size=224):
     dropout = dropout if train else None
 
-    ## make initial image size also a parameter? so we can define
-    # layer spatial sizes in terms of it.
-
     class Conv1(ConvRNNCell):
         def __init__(self, *args, **kwargs):
-            # does this even work
             super(Conv1, self).__init__(*args, **kwargs)
             self._state_size = [self.batch_size, input_spatial_size // 4,
                                 input_spatial_size // 4, 96]
@@ -221,7 +217,6 @@ def get_model(input_seq,
               model_base=None,
               train=False,
               bypasses=[],
-              T_tot=8,
               init_weights='xavier',
               weight_decay=None,
               dropout=None,
@@ -236,12 +231,12 @@ def get_model(input_seq,
               input_spatial_size=None):
     """
     Creates model graph and returns logits.
+    model_base: string name of model base. (Ex: 'alexnet')
     :param layers: Dictionary to construct cells for each layer of the form
      {layer #: ['cell type', {arguments}] Does not include the final linear
      layer used to get logits.
     :param bypasses: list of tuples (from, to)
     :param input_seq: list for sequence of input images as tf Tensors
-    :param T_tot: total number of time steps to run the model.
     :param features_layer: if None (equivalent to a value of len(layers) + 1) ,
      outputs logitsfrom last FC. Otherwise, accepts a number 0 through
      len(layers) + 1 and _model will output the features of that layer.
@@ -252,24 +247,23 @@ def get_model(input_seq,
     """
 
     # create networkx graph with layer #s as nodes
-    layers = model_base(weight_decay=weight_decay, memory_decay=memory_decay,
+    if model_base == 'alexnet':
+        mb = alexnet
+    else:
+        mb = None
+    layers = mb(weight_decay=weight_decay, memory_decay=memory_decay,
                         dropout=dropout, init_weights=init_weights,
                         train=train, input_spatial_size=input_spatial_size)
     graph = _construct_graph(layers, bypasses, batch_size)
 
     nlayers = len(layers)  # number of layers including the final FC/logits
-    ntimes = len(input_seq)
+    shortest_path = nx.shortest_path_length(graph, source='0',
+                                            target=str(nlayers))
+    ntimes = len(input_seq) + shortest_path - 1  # total num. of time steps
 
     # ensure that graph is acyclic
     if not nx.is_directed_acyclic_graph(graph):
         raise ValueError('graph not acyclic')
-
-    # ensure that T_tot >= shortest_path through graph
-    shortest_path = nx.shortest_path_length(graph, source='0',
-                                            target=str(nlayers))
-    if ntimes < shortest_path:
-        raise ValueError('T_tot ({}) < shortest path length ({})'.format(T_tot,
-                                                                 shortest_path))
 
     # get first and last time points where layers matter
     if trim_top:
@@ -286,19 +280,20 @@ def get_model(input_seq,
         for node in graph:
             graph.node[node]['last'] = ntimes
 
-    # check inputs: Compares input sequence length with the input length
-    # that is needed for output at T_tot. Zero pads or truncates as needed
-    # TODO: can this scenario happen?
-    if len(input_seq) > graph.node['0']['last'] + 1:  # more inputs than needed => truncate
-        print('truncating input sequence to length', graph.node['0']['last'] + 1)
-        del input_seq[graph.node['0']['last'] + 1:]
-    elif len(input_seq) < graph.node['0']['last'] + 1:  # too short => pad with zero inputs
-        print('zero-padding input sequence to length', graph.node['0']['last'] + 1)
-        num_needed = (graph.node['0']['last'] + 1) - len(input_seq)  # inputs to add
-        if not input_seq:  # need input length of at least one
-            raise ValueError('input sequence should not be empty')
-        padding = [tf.zeros_like(input_seq[0]) for i in range(0, num_needed)]
-        input_seq.extend(padding)
+    # # check inputs: Compares input sequence length with the input length
+    # # that is needed for output at T_tot. Zero pads or truncates as needed
+    # # TODO: can this scenario happen?
+    # if len(input_seq) > graph.node['0']['last'] + 1:  # more inputs than needed => truncate
+    #     print('truncating input sequence to length', graph.node['0']['last'] + 1)
+    #     del input_seq[graph.node['0']['last'] + 1:]
+    # elif len(input_seq) < graph.node['0']['last'] + 1:  # too short => pad with zero inputs
+    #     print('zero-padding input sequence to length', graph.node['0']['last'] + 1)
+    #     num_needed = (graph.node['0']['last'] + 1) - len(input_seq)  # inputs to add
+    #     if not input_seq:  # need input length of at least one
+    #         raise ValueError('input sequence should not be empty')
+    #     padding = [{'data': tf.zeros_like(input_seq[0]['data'])}
+    #                for i in range(0, num_needed)]
+    #     input_seq.extend(padding)
 
     # add inputs to outputs dict for layer 0
     # outputs = {layer#: {t1:__, t2:__, ... }}
@@ -372,8 +367,22 @@ def get_model(input_seq,
                 else:  # if empty, layer j doesn't contribute to output t<= T_tot
                     fstate = layer['initial_states']
 
+                # fill in empty outputs with zeros since we index by t
+                out_first = []
+                for t in range(0, layer['first']):
+                    out_first.append(
+                        tf.zeros(shape=layer['cell'].output_size,
+                                 dtype=tf.float32))
+                out = out_first + out
+
                 layer['outputs'] = out
                 layer['final_states'] = fstate
+
+    for node in graph:
+        if node != '0':
+            layer = graph.node[node]
+            layer['outputs'] = layer['outputs'][
+                               layer['first']:layer['last'] + 1]
 
     if features_layer is None:
         return graph.node[str(len(layers))]['outputs']
@@ -406,7 +415,7 @@ def _construct_graph(layers, bypasses, batch_size):
     print(graph.nodes())
 
     # check that bypasses don't add extraneous nodes
-    if len(graph) != nlayers:
+    if len(graph) != nlayers + 1:
         import pdb; pdb.set_trace()
         raise ValueError('bypasses list created extraneous nodes')
 
@@ -439,7 +448,7 @@ def _last(graph, ntimes):
     last time t where layer j information reaches output layer at, before T_tot
     Note last[0] >= 0, for input layer
     :param graph: networkx graph representing model
-    :param T_tot: total number of time steps to run the model.
+    :param ntimes: total number of time steps to run the model.
     :return: dictionary {layer j: last time t}
     """
     curr_layers = [str(len(graph) - 1)]  # start with output layer
