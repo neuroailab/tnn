@@ -48,10 +48,10 @@ def get_valid_data(**params):
 
 
 def get_valid_targets(inputs, outputs, **kwargs):
-    top_1_ops = [tf.nn.in_top_k(output, inp['label'], 1)
+    top_1_ops = [tf.nn.in_top_k(output, inp['labels'], 1)
                 for inp, output in zip(inputs, outputs)]
-    top_5_ops = [tf.nn.in_top_k(output, label, 5)
-                for output, label in zip(inputs, outputs)]
+    top_5_ops = [tf.nn.in_top_k(output, inp['labels'], 5)
+                 for inp, output in zip(inputs, outputs)]
     return {'top1': top_1_ops, 'top5': top_5_ops}
 
 
@@ -114,6 +114,7 @@ def main(params):
     start_step = params['saver']['start_step'] if params['saver']['restore'] else 0
     end_step = params['num_epochs'] * params['num_train_batches']
 
+    print('UH, PARAMS[DATA] IS CURRENTLY:', params['data'])
     base.run_base(params,
              model_func=model.get_model,
              model_kwargs=model_func_kwargs,
@@ -129,8 +130,8 @@ def main(params):
              train_targets_func=None,
              train_targets_kwargs={},
              valid_data_func=get_valid_data,
-             valid_data_kwargs={},
-             valid_targets_func=get_valid_data,
+             valid_data_kwargs=params['data'],  # {},
+             valid_targets_func=get_valid_targets,
              valid_targets_kwargs={},
              thres_loss=params['thres_loss'],
              seed=params['seed'],
