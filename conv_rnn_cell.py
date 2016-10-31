@@ -90,9 +90,9 @@ class ConvRNNCell(RNNCell):
                                   trainable=trainable,
                                   name='decay_param')
             decay_factor = tf.sigmoid(mem)
-            new_state = tf.mul(state, decay_factor) + in_layer
         else:
-            new_state = state
+            decay_factor = 0
+        new_state = tf.mul(state, decay_factor) + in_layer
         self._state = new_state
         return new_state
 
