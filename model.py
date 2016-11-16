@@ -6,8 +6,52 @@ from __future__ import absolute_import, division, print_function
 
 import networkx as nx
 import tensorflow as tf
+from tensorflow.python.ops.rnn_cell import RNNCell
 
-from conv_rnn_cell import ConvRNNCell
+from tfutils.model_new import ConvNet
+
+
+class ConvRNNCell(ConvNet, RNNCell):
+
+    def __init__(self, output_size, state_size, seed=None, scope=None):
+        super(ConvRNNCell, self).__init__(seed=seed)
+        self.scope = type(self).__name__ if scope is None else scope
+        self._output_size = output_size
+        self._state_size = state_size
+
+    @property
+    def state_size(self):
+        return self._state_size
+
+    @property
+    def output_size(self):
+        return self._output_size
+
+    def __call__(self, inputs, state=None):
+        raise NotImplementedError
+
+    def zero_state(self, batch_size, dtype):
+        """Return zero-filled state tensor
+
+        Args:
+            batch_size: int, float, or unit Tensor representing the batch size.
+            dtype: the data type to use for the state.
+        Returns:
+            A tensor of shape `state_size` filled with zeros.
+        """
+        zeros = tf.zeros(self._state_size, dtype=tf.float32, name='zero_state')
+        return zeros
+
+    def memory(self, in_layer, state, memory_decay=0, trainable=False):
+        initializer = tf.constant_initializer(value=memory_decay)
+        mem = tf.get_variable(initializer=initializer,
+                              shape=1,
+                              trainable=trainable,
+                              name='decay_param')
+        decay_factor = tf.sigmoid(mem)
+        new_state = tf.mul(state, decay_factor) + in_layer
+        self._state = new_state
+        return new_state
 
 
 def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
@@ -19,8 +63,8 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
             # with tf.variable_scope(type(self).__name__, reuse=True):
                 conv = self.conv(inputs, 96, 11, 4, stddev=.1, bias=.1,
                                  init=init_weights, weight_decay=weight_decay)
-                norm = self.lrn(conv)
-                new_state = self.memory(norm, state, memory_decay=memory_decay)
+                # norm = self.lrn(conv)
+                new_state = self.memory(conv, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
                 pool = self.pool(relu, 3, 2)
                 return pool, new_state
@@ -30,8 +74,8 @@ def alexnet(weight_decay=.0005, memory_decay=None, dropout=.5,
             # with tf.variable_scope(type(self).__name__, reuse=True):
                 conv = self.conv(inputs, 256, 5, 1, stddev=.1, bias=.1,
                                  init=init_weights, weight_decay=weight_decay)
-                norm = self.lrn(conv)
-                new_state = self.memory(norm, state, memory_decay=memory_decay)
+                # norm = self.lrn(conv)
+                new_state = self.memory(conv, state, memory_decay=memory_decay)
                 relu = self.relu(new_state)
                 pool = self.pool(relu, 3, 2)
                 return pool, new_state
@@ -384,10 +428,12 @@ def get_loss(inputs, outputs, loss_fun=None, time_penalty=1.2):
         loss_t = tf.reduce_mean(loss_fun(output, inp['labels']),
                                 name='xentropy_loss_t{}'.format(t))
         loss_t = loss_t * time_penalty**t
-        tf.add_to_collection('losses', loss_t)
+        # tf.add_to_collection('losses', loss_t)
         losses.append(loss_t)
 
     # use 'losses' collection to also add weight decay loss
-    total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
+    reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    total_loss = sum(losses) + sum(reg_losses)
+    # total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
 
     return total_loss
