@@ -7,18 +7,27 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
-import model
-import numpy as np
 import argparse
 import json
 import os
+
+import tensorflow as tf
+import numpy as np
 import pandas
+
+import dldata
+import dldata.stimulus_sets.hvm as hvm
+from dldata.metrics.utils import compute_metric_base
+
+import model
+
 
 HVM10_TRAIN_PATH = '/home/mrui/bypass/consistency/images/'
 META_TRAIN_PATH = '/home/mrui/bypass/consistency/metadata.pkl'
+# META_TRAIN_PATH = '/mindhive/dicarlolab/u/qbilius/computed/mrui/metadata.pkl'
 HVM10_TEST_PATH = '/home/mrui/bypass/consistency/images/'
 META_TEST_PATH = '/home/mrui/bypass/consistency/hvm10test.pkl'
+# META_TEST_PATH = '/mindhive/dicarlolab/u/qbilius/computed/mrui/hvm10test.pkl'
 
 IMAGE_SIZE_ORIG = 256
 PIXEL_DEPTH = 255
@@ -39,8 +48,7 @@ def get_features(params, outfile,
             # get list of image paths for tf FileReader and make filename queue
             filenames_list = [HVM10_TRAIN_PATH + id + '.png' for id in
                               meta_data.id]
-            filename_queue = tf.train.string_input_producer(filenames_list,
-                                                            shuffle=False)
+            filename_queue = tf.train.string_input_producer(filenames_list, shuffle=False)
             reader = tf.WholeFileReader()
             key, value = reader.read(filename_queue)
             print('Reading from training set')
@@ -60,8 +68,7 @@ def get_features(params, outfile,
             # get list of image paths for tf FileReader and make filename queue
             filenames_list = [HVM10_TEST_PATH + a.split('20110131/')[1]
                               for a in meta_data]
-            filename_queue = tf.train.string_input_producer(filenames_list,
-                                                            shuffle=False)
+            filename_queue = tf.train.string_input_producer(filenames_list, shuffle=False)
             reader = tf.WholeFileReader()
             key, value = reader.read(filename_queue)
             print('Reading from test set')
@@ -171,6 +178,37 @@ def _features(img_raw, num_imgs, params, layer,
     return features_all
 
 
+def run_behav():
+    import sys
+    sys.path.insert(0, '../')
+    import train_clf
+    import common
+
+    train = common.HvM10Train()
+    test = common.HvM10()
+
+    train_meta = pandas.read_pickle(META_TRAIN_PATH)
+    for tm1, tm2 in zip(train_meta, train.meta):
+        assert tm1[-2]==tm2[-3]
+
+    test_meta = pandas.read_pickle(META_TEST_PATH)
+    for tm1, tm2 in zip(test_meta, test.meta['filename']):
+        assert tm1==tm2
+
+    train_feats = np.load('/mindhive/dicarlolab/u/qbilius/computed/mrui/anet_byp13_train_7.npy')
+    train_feats = np.squeeze(train_feats)
+    test_feats = np.load('/mindhive/dicarlolab/u/qbilius/computed/mrui/anet_byp13_test_7.npy')
+    test_feats = np.squeeze(test_feats)
+    import pdb; pdb.set_trace()
+
+    clf = train_clf.Clf2AFC(nfeats=1000, norm=False)
+    clf.fit(train_feats, train.meta['obj'], train.OBJS, decision_function_shape='ovr')
+    confi = clf.predict_proba(test_feats, targets=test.meta['obj'], kind='2-way')
+    conf_pred = pandas.Series(confi, index=test.meta['id'])
+    agg = test.human_data.groupby('id').acc.mean()
+    print(agg.corr(conf_pred))
+    return conf_pred
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser('logits.py')
     # path to parameters file
@@ -212,6 +250,20 @@ if __name__ == "__main__":
     # everything into strings.
     for entry in ['layers', 'layer_sizes']:
         params[entry] = {int(k): v for k, v in params[entry].items()}
+
+    params['batch_size'] = 1
+    for k,val in params['layers'].items():
+        if 'output_size' in val[1]:
+            params['layers'][k][1]['output_size'] = [1] + val[1]['output_size'][1:]
+        if 'state_size' in val[1]:
+            params['layers'][k][1]['state_size'] = [1] + val[1]['state_size'][1:]
+    for k,val in params['layer_sizes'].items():
+        if 'output' in val:
+            params['layer_sizes'][k]['output'] = [1] + val['output'][1:]
+        if 'state' in val:
+            params['layer_sizes'][k]['state'] = [1] + val['state'][1:]
+    # params['save_path'] = '/home/qbilius/mh17/computed/anet_byp1/outputs/anet_byp1'
+    # print(params)
     get_features(params,
                  outfile=args.out,
                  layer=args.layer,
