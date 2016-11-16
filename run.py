@@ -21,7 +21,7 @@ def get_data(train=False,
              num_valid_images=2**14,
              num_threads=4,
              random_crop=True,
-             T_tot=8
+             input_seq_len=1
              ):
     # Get images and labels for ImageNet.
     if train:
@@ -36,7 +36,7 @@ def get_data(train=False,
                           batch_size=batch_size,
                           n_threads=num_threads)
     print('images and labels done')
-    return [d.batch] * T_tot, d
+    return [d.batch] * input_seq_len, d
 
 
 def get_train_data(**params):
@@ -48,10 +48,10 @@ def get_valid_data(**params):
 
 
 def get_valid_targets(inputs, outputs, **kwargs):
-    top_1_ops = [tf.nn.in_top_k(output, inp['label'], 1)
+    top_1_ops = [tf.nn.in_top_k(output, inp['labels'], 1)
                 for inp, output in zip(inputs, outputs)]
-    top_5_ops = [tf.nn.in_top_k(output, label, 5)
-                for output, label in zip(inputs, outputs)]
+    top_5_ops = [tf.nn.in_top_k(output, inp['labels'], 5)
+                 for inp, output in zip(inputs, outputs)]
     return {'top1': top_1_ops, 'top5': top_5_ops}
 
 
@@ -99,13 +99,13 @@ def get_optimizer(loss, learning_rate=.01, momentum=.9, grad_clip=True):
 
 
 def main(params):
-    model_func_kwargs = {'model_base': model.alexnet,
-                         'features_layer': None  # last layer
+    model_func_kwargs = {#'model_base': model.alexnet,
+                         'features_layer': None # last layer
                          }
     model_func_kwargs.update(params['model'])
 
-    data_func_kwargs = {'T_tot': params['model']['T_tot']}
-    data_func_kwargs.update(params['data'])
+    # data_func_kwargs = {'T_tot': params['model']['T_tot']}
+    # data_func_kwargs.update(params['data'])  # never used..
 
     lr_func_kwargs = {'num_batches_per_epoch': params['num_train_batches']}
     lr_func_kwargs.update(params['learning_rate'])
@@ -114,6 +114,7 @@ def main(params):
     start_step = params['saver']['start_step'] if params['saver']['restore'] else 0
     end_step = params['num_epochs'] * params['num_train_batches']
 
+    print('UH, PARAMS[DATA] IS CURRENTLY:', params['data'])
     base.run_base(params,
              model_func=model.get_model,
              model_kwargs=model_func_kwargs,
@@ -129,8 +130,8 @@ def main(params):
              train_targets_func=None,
              train_targets_kwargs={},
              valid_data_func=get_valid_data,
-             valid_data_kwargs={},
-             valid_targets_func=get_valid_data,
+             valid_data_kwargs=params['data'],  # {},
+             valid_targets_func=get_valid_targets,
              valid_targets_kwargs={},
              thres_loss=params['thres_loss'],
              seed=params['seed'],
