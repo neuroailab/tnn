@@ -157,10 +157,11 @@ def alexnet(input_spatial_size=224,
             super(Conv1, self).__init__(output_size, state_size)
 
         def __call__(self, inputs, state):
-            self.conv(inputs, state, ksize=11, stride=4, stddev=.01, bias=0)
-            self.norm(depth_radius=4, bias=1, alpha=.001 / 9.0, beta=.75)
-            self.pool(3, 2, padding='VALID')
-            return self.output, self.state
+            with tf.variable_scope('Conv1'):
+                self.conv(inputs, state, ksize=11, stride=4, stddev=.01, bias=0)
+                self.norm(depth_radius=4, bias=1, alpha=.001 / 9.0, beta=.75)
+                self.pool(3, 2, padding='VALID')
+                return self.output, self.state
 
     class Conv2(ConvRNNCell):
         def __init__(self):
@@ -171,10 +172,11 @@ def alexnet(input_spatial_size=224,
             super(Conv2, self).__init__(output_size, state_size)
 
         def __call__(self, inputs, state):
-            self.conv(inputs, state, ksize=5, stride=1, stddev=.01, bias=1)
-            self.norm(depth_radius=4, bias=1, alpha=.001 / 9.0, beta=.75)
-            self.pool(3, 2, padding='VALID')
-            return self.output, self.state
+            with tf.variable_scope('Conv2'):
+                self.conv(inputs, state, ksize=5, stride=1, stddev=.01, bias=1)
+                self.norm(depth_radius=4, bias=1, alpha=.001 / 9.0, beta=.75)
+                self.pool(3, 2, padding='VALID')
+                return self.output, self.state
 
     class Conv3(ConvRNNCell):
         def __init__(self):
@@ -185,8 +187,9 @@ def alexnet(input_spatial_size=224,
             super(Conv3, self).__init__(output_size, state_size)
 
         def __call__(self, inputs, state):
-            self.conv(inputs, state, ksize=3, stride=1, stddev=.01, bias=0)
-            return self.output, self.state
+            with tf.variable_scope('Conv3'):
+                self.conv(inputs, state, ksize=3, stride=1, stddev=.01, bias=0)
+                return self.output, self.state
 
     class Conv4(ConvRNNCell):
         def __init__(self):
@@ -197,8 +200,9 @@ def alexnet(input_spatial_size=224,
             super(Conv4, self).__init__(output_size, state_size)
 
         def __call__(self, inputs, state):
-            self.conv(inputs, state, ksize=3, stride=1, stddev=.01, bias=1)
-            return self.output, self.state
+            with tf.variable_scope('Conv4'):
+                self.conv(inputs, state, ksize=3, stride=1, stddev=.01, bias=1)
+                return self.output, self.state
 
     class Conv5(ConvRNNCell):
         def __init__(self):
@@ -209,9 +213,10 @@ def alexnet(input_spatial_size=224,
             super(Conv5, self).__init__(output_size, state_size)
 
         def __call__(self, inputs, state):
-            self.conv(inputs, state, ksize=3, stride=1, stddev=.01, bias=1)
-            self.pool(3, 2, padding='VALID')
-            return self.output, self.state
+            with tf.variable_scope('Conv5'):
+                self.conv(inputs, state, ksize=3, stride=1, stddev=.01, bias=1)
+                self.pool(3, 2, padding='VALID')
+                return self.output, self.state
 
     class FC6(ConvRNNCell):
         def __init__(self):
@@ -220,8 +225,9 @@ def alexnet(input_spatial_size=224,
             super(FC6, self).__init__(output_size, state_size)
 
         def __call__(self, inputs, state):
-            self.fc(inputs, state, stddev=.01, bias=1)
-            return self.output, self.state
+            with tf.variable_scope('FC6'):
+                self.fc(inputs, state, stddev=.01, bias=1)
+                return self.output, self.state
 
     class FC7(ConvRNNCell):
         def __init__(self):
@@ -230,8 +236,9 @@ def alexnet(input_spatial_size=224,
             super(FC7, self).__init__(output_size, state_size)
 
         def __call__(self, inputs, state):
-            self.fc(inputs, state, stddev=.01, bias=1)
-            return self.output, self.state
+            with tf.variable_scope('FC7'):
+                self.fc(inputs, state, stddev=.01, bias=1)
+                return self.output, self.state
 
     class FC8(ConvRNNCell):
         def __init__(self):
@@ -240,8 +247,9 @@ def alexnet(input_spatial_size=224,
             super(FC8, self).__init__(output_size, state_size)
 
         def __call__(self, inputs, state):
-            self.fc(inputs, state, activation=None, dropout=None, stddev=.01, bias=0)
-            return self.output, self.state
+            with tf.variable_scope('FC8'):
+                self.fc(inputs, state, activation=None, dropout=None, stddev=.01, bias=0)
+                return self.output, self.state
 
     layers = [Conv1, Conv2, Conv3, Conv4, Conv5, FC6, FC7, FC8]
 
@@ -357,6 +365,7 @@ def get_model(inputs,
         if node != '0':
             layer = graph.node[node]
             with tf.variable_scope(layer['name'], reuse=reuse):
+                import pdb; pdb.set_trace()
                 # print('{:-^80}'.format(layer['name']))
                 # create inputs list for layer j, each element is an input in time
                 layer['inputs'] = []  # list of inputs to layer j in time

@@ -102,7 +102,7 @@ params = {
         'init_weights': 'xavier',
         'weight_decay': .0005,  # None for no decay
         'dropout': .5,  # for training; config writes None for eval mode
-        'memory_decay': 0,  # just for Conv or ConvPool layers; float to use memory
+        'memory_decay': None,  # just for Conv or ConvPool layers; float to use memory
                           # Note: default weights, strides, etc -> adjust in ConvRNN.py
                            # -1.1 initialize decay_factor t= sigmoid(-1.1) = 0.25
         'memory_trainable': False,
@@ -149,7 +149,7 @@ params = {
     'optimizer_params': {
         'func': tfutils.optimizer.ClipOptimizer,
         'optimizer_class': tf.train.MomentumOptimizer,
-        'clip': False,
+        'clip': True,
         'momentum': .9
     },
 
