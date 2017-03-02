@@ -1,0 +1,377 @@
+{ "seed": 0,
+  "nodes": [
+    {
+      "name": "images",
+      "type": "input",
+      "shape": [
+        256,
+        224,
+        224,
+        3
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "labels",
+      "type": "input",
+      "shape": [
+        256
+      ],
+      "dtype": "int64"
+    },
+    {
+      "name": "conv1",
+      "type": "cell",
+      "shape_from": "images",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 96,
+          "ksize": 11,
+          "strides": [1,4,4,1],
+          "padding": "VALID",
+          "kernel_init": "xavier",
+          "bias": 0
+        },
+        {
+          "function": "relu"
+        }
+      ],
+      "memory": {
+          "function": "memory",
+          "memory_decay": 0,
+          "trainable": false
+        },
+      "post_memory": [
+        {
+          "function": "lrn",
+          "depth_radius": 5,
+          "bias": 1,
+          "alpha": 0.0001,
+          "beta": 0.75
+        },
+        {
+          "function": "max_pool",
+          "ksize": [1,3,3,1],
+          "strides": [1,2,2,1],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "conv2",
+      "type": "cell",
+      "shape_from": "conv1",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 256,
+          "ksize": 5,
+          "strides": [1,1,1,1],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "bias": 0
+        },
+        {
+          "function": "relu"
+        }
+      ],
+      "memory": {
+          "function": "memory",
+          "memory_decay": 0,
+          "trainable": false
+        },
+      "post_memory": [
+        {
+          "function": "lrn",
+          "depth_radius": 5,
+          "bias": 1,
+          "alpha": 0.0001,
+          "beta": 0.75
+        },
+        {
+          "function": "max_pool",
+          "ksize": [1,3,3,1],
+          "strides": [1,2,2,1],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "conv3",
+      "type": "cell",
+      "shape_from": "conv2",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 384,
+          "ksize": 3,
+          "strides": [1,1,1,1],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "bias": 0
+        },
+        {
+          "function": "relu"
+        }
+      ],
+      "memory": {
+          "function": "memory",
+          "memory_decay": 0,
+          "trainable": false
+        },
+      "post_memory": []
+    },
+    {
+      "name": "conv4",
+      "type": "cell",
+      "shape_from": "conv3",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 384,
+          "ksize": 3,
+          "strides": [1,1,1,1],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "bias": 0
+        },
+        {
+          "function": "relu"
+        }
+      ],
+      "memory": {
+          "function": "memory",
+          "memory_decay": 0,
+          "trainable": false
+        },
+      "post_memory": []
+    },
+    {
+      "name": "conv5",
+      "type": "cell",
+      "shape_from": "conv4",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 256,
+          "ksize": 3,
+          "strides": [1,1,1,1],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "bias": 0
+        },
+        {
+          "function": "relu"
+        }
+      ],
+      "memory": {
+          "function": "memory",
+          "memory_decay": 0,
+          "trainable": false
+        },
+      "post_memory": [
+        {
+          "function": "max_pool",
+          "ksize": [1,3,3,1],
+          "strides": [1,2,2,1],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "fc6",
+      "type": "cell",
+      "shape_from": "conv5",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 4096,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.01
+          },
+          "bias": 0.1,
+          "dropout": 0.5
+        },
+        {
+          "function": "relu"
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    },
+    {
+      "name": "fc7",
+      "type": "cell",
+      "shape_from": "fc6",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 4096,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.01
+          },
+          "bias": 0.1,
+          "dropout": 0.5
+        },
+        {
+          "function": "relu"
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    },
+    {
+      "name": "fc8",
+      "type": "cell",
+      "shape_from": "fc7",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 1000,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.01
+          },
+          "bias": 0,
+          "dropout": null
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    },
+    {
+      "name": "loss",
+      "type": "output",
+      "function": "sparse_softmax_cross_entropy_with_logits"
+    }
+  ],
+  "edges": [
+    {
+      "from": "images",
+      "to": "conv1"
+    },
+    {
+      "from": "conv1",
+      "to": "conv2"
+    },
+    {
+      "from": "conv2",
+      "to": "conv3"
+    },
+    {
+      "from": "conv3",
+      "to": "conv4"
+    },
+    {
+      "from": "conv4",
+      "to": "conv5"
+    },
+    {
+      "from": "conv5",
+      "to": "fc6"
+    },
+    {
+      "from": "fc6",
+      "to": "fc7"
+    },
+    {
+      "from": "fc7",
+      "to": "fc8"
+    },
+    {
+      "from": "fc8",
+      "to": "loss"
+    },
+    {
+      "from": "labels",
+      "to": "loss"
+    }
+  ]
+}
