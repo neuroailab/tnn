@@ -1,28 +1,9 @@
 { "seed": 0,
   "nodes": [
     {
-      "name": "images",
-      "type": "input",
-      "shape": [
-        256,
-        224,
-        224,
-        3
-      ],
-      "dtype": "float32"
-    },
-    {
-      "name": "labels",
-      "type": "input",
-      "shape": [
-        256
-      ],
-      "dtype": "int64"
-    },
-    {
       "name": "conv1",
-      "type": "cell",
-      "shape_from": "images",
+      "shape": [224,224,3],
+      "dtype": "float32",
       "state_init": {
         "function": "zeros"
       },
@@ -69,7 +50,6 @@
     },
     {
       "name": "conv2",
-      "type": "cell",
       "shape_from": "conv1",
       "state_init": {
         "function": "zeros"
@@ -117,7 +97,6 @@
     },
     {
       "name": "conv3",
-      "type": "cell",
       "shape_from": "conv2",
       "state_init": {
         "function": "zeros"
@@ -151,7 +130,6 @@
     },
     {
       "name": "conv4",
-      "type": "cell",
       "shape_from": "conv3",
       "state_init": {
         "function": "zeros"
@@ -185,7 +163,6 @@
     },
     {
       "name": "conv5",
-      "type": "cell",
       "shape_from": "conv4",
       "state_init": {
         "function": "zeros"
@@ -226,7 +203,6 @@
     },
     {
       "name": "fc6",
-      "type": "cell",
       "shape_from": "conv5",
       "state_init": {
         "function": "zeros"
@@ -261,7 +237,6 @@
     },
     {
       "name": "fc7",
-      "type": "cell",
       "shape_from": "fc6",
       "state_init": {
         "function": "zeros"
@@ -296,7 +271,6 @@
     },
     {
       "name": "fc8",
-      "type": "cell",
       "shape_from": "fc7",
       "state_init": {
         "function": "zeros"
@@ -325,18 +299,9 @@
         "trainable": false
       },
       "post_memory": []
-    },
-    {
-      "name": "loss",
-      "type": "output",
-      "function": "sparse_softmax_cross_entropy_with_logits"
     }
   ],
   "edges": [
-    {
-      "from": "images",
-      "to": "conv1"
-    },
     {
       "from": "conv1",
       "to": "conv2"
@@ -364,14 +329,6 @@
     {
       "from": "fc7",
       "to": "fc8"
-    },
-    {
-      "from": "fc8",
-      "to": "loss"
-    },
-    {
-      "from": "labels",
-      "to": "loss"
     }
   ]
 }
