@@ -1,0 +1,203 @@
+{
+  "nodes": [
+    {
+      "name": "conv1",
+      "shape": [
+        28,
+        28,
+        1
+      ],
+      "dtype": "float32",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 32,
+          "ksize": 5,
+          "strides": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "padding": "SAME",
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.1,
+            "seed": 0
+          },
+          "bias": 0,
+          "activation": "relu",
+          "batch_norm": false
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": [
+        {
+          "function": "max_pool",
+          "ksize": [
+            1,
+            2,
+            2,
+            1],
+          "strides": [
+            1,
+            2,
+            2,
+            1],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "conv2",
+      "shape_from": "conv1",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 64,
+          "ksize": 5,
+          "strides": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "padding": "SAME",
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.1,
+            "seed": 0
+          },
+          "bias": 0.1,
+          "activation": "relu",
+          "batch_norm": false
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": [
+        {
+          "function": "max_pool",
+          "ksize": [
+            1,
+            2,
+            2,
+            1],
+          "strides": [
+            1,
+            2,
+            2,
+            1],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "fc1",
+      "shape_from": "conv2",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 512,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.1,
+            "seed": 0
+          },
+          "bias": 0.1,
+          "activation": "relu",
+          "batch_norm": false,
+          "dropout": null
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    },
+    {
+      "name": "fc2",
+      "shape_from": "fc1",
+      "state_init": {
+        "function": "zeros"
+      },
+      "output_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 10,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.1,
+            "seed": 0
+          },
+          "bias": 0.1,
+          "activation": null,
+          "batch_norm": false,
+          "dropout": null
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "conv1",
+      "to": "conv2"
+    },
+    {
+      "from": "conv2",
+      "to": "fc1"
+    },
+    {
+      "from": "fc1",
+      "to": "fc2"
+    }
+  ]
+}

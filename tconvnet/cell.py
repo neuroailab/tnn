@@ -35,7 +35,7 @@ def harbor(inputs, shape):
             if len(inp.shape) == 2:
                 raise ValueError('layers of dim 2 cannot project to layers of dim 4')
             elif len(inp.shape) == 4:
-                out = tf.image.resize_images(inp, shape[1:3])#tf.constant(shape))
+                out = tf.image.resize_images(inp, shape[1:3])  # tf.constant(shape))
                 outputs.append(out)
                 # h = inp.shape.as_list()[1] // shape[1]
                 # w = inp.shape.as_list()[2] // shape[2]
@@ -50,7 +50,11 @@ def harbor(inputs, shape):
             else:
                 raise ValueError
 
+        else:
+            raise ValueError('harbor cannot process layer of dim {}'.format(len(shape)))
+
     output = tf.concat(outputs, axis=-1, name='harbor')
+
     return output
 
 

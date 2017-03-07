@@ -5,7 +5,7 @@ import sys, json, itertools, copy
 import networkx as nx
 import tensorflow as tf
 
-sys.path.insert(0, '../../tfutils/base_class')
+sys.path.insert(0, '../../tfutils/master')
 import tfutils.model
 
 import tconvnet.cell
@@ -44,12 +44,11 @@ def import_json(json_file_name):
         node_names.append(node['name'])
     assert set(itertools.chain(*edges)) == set(node_names), 'nodes and edges do not match'
 
-    return json_data['nodes'], edges, json_data['seed']
+    return json_data['nodes'], edges
 
 
 def graph_from_json(json_file_name):
-    json_nodes, edges, seed = import_json(json_file_name)
-    tf.set_random_seed(seed)
+    json_nodes, edges = import_json(json_file_name)
 
     G = nx.DiGraph(data=edges)
     for json_node in json_nodes:
@@ -143,13 +142,14 @@ def unroll(G, input_seq, ntimes=None):
         - ntimes (int or None, default: None)
             The number of time steps
     """
-
     # find the longest path from the inputs to the outputs:
     input_nodes = [n for n in G if len(G.predecessors(n)) == 0]
     output_nodes = [n for n in G if len(G.successors(n)) == 0]
     inp_out = itertools.product(input_nodes, output_nodes)
-    paths = [nx.all_simple_paths(G, inp, out) for inp, out in inp_out]
-    longest_path_len = max(len(list(p)) for p in itertools.chain(paths)) - 1
+    paths = []
+    for inp, out in inp_out:
+        paths.extend([p for p in nx.all_simple_paths(G, inp, out)])
+    longest_path_len = max(len(p) for p in paths)
 
     if ntimes is None:
         ntimes = longest_path_len
@@ -164,29 +164,29 @@ def unroll(G, input_seq, ntimes=None):
     for t in range(ntimes):  # Loop over time
         for node, attr in G.nodes(data=True):  # Loop over nodes
             # if node not in input_nodes and node not in output_nodes:
-                if t == 0:
-                    inputs = []
-                    if node in input_nodes:
-                        inputs.append(input_seq[t])
-                    else:
-                        for pred in sorted(G.predecessors(node)):
-                            inputs.append(None)
-                    if all([i is None for i in inputs]):
-                        inputs = None
-
-                    state = None
-
+            if t == 0:
+                inputs = []
+                if node in input_nodes:
+                    inputs.append(input_seq[t])
                 else:
-                    inputs = []
-                    if node in input_nodes:
-                        inputs.append(input_seq[t])
-                    else:
-                        for pred in sorted(G.predecessors(node)):
-                            inputs.append(G.node[pred]['outputs'][t-1])
-                    state = attr['states'][t-1]
+                    for pred in sorted(G.predecessors(node)):
+                        inputs.append(None)
+                if all([i is None for i in inputs]):
+                    inputs = None
 
-                output, state = attr['cell'](inputs=inputs, state=state)
-                attr['outputs'].append(output)
-                attr['states'].append(state)
+                state = None
+
+            else:
+                inputs = []
+                if node in input_nodes:
+                    inputs.append(input_seq[t])
+                else:
+                    for pred in sorted(G.predecessors(node)):
+                        inputs.append(G.node[pred]['outputs'][t-1])
+                state = attr['states'][t-1]
+
+            output, state = attr['cell'](inputs=inputs, state=state)
+            attr['outputs'].append(output)
+            attr['states'].append(state)
 
         tf.get_variable_scope().reuse_variables()
