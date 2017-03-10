@@ -34,7 +34,7 @@
             "seed": 0
           },
           "bias": 0,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false
         }
       ],
@@ -44,6 +44,9 @@
         "trainable": false
       },
       "post_memory": [
+        {
+          "function": "relu"
+        },
         {
           "function": "lrn",
           "depth_radius": 5,
@@ -99,7 +102,7 @@
             "seed": 0
           },
           "bias": 0,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false
         }
       ],
@@ -109,6 +112,9 @@
         "trainable": false
       },
       "post_memory": [
+        {
+          "function": "relu"
+        },
         {
           "function": "lrn",
           "depth_radius": 5,
@@ -164,7 +170,7 @@
             "seed": 0
           },
           "bias": 0,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false
         }
       ],
@@ -173,7 +179,11 @@
         "memory_decay": 0,
         "trainable": false
       },
-      "post_memory": []
+      "post_memory": [
+        {
+          "function": "relu"
+        }
+      ]
     },
     {
       "name": "conv4",
@@ -205,7 +215,7 @@
             "seed": 0
           },
           "bias": 0,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false
         }
       ],
@@ -214,7 +224,11 @@
         "memory_decay": 0,
         "trainable": false
       },
-      "post_memory": []
+      "post_memory": [
+        {
+          "function": "relu"
+        }
+      ]
     },
     {
       "name": "conv5",
@@ -246,7 +260,7 @@
             "seed": 0
           },
           "bias": 0,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false
         }
       ],
@@ -256,6 +270,9 @@
         "trainable": false
       },
       "post_memory": [
+        {
+          "function": "relu"
+        },
         {
           "function": "max_pool",
           "ksize": [
@@ -297,7 +314,7 @@
             "seed": 0
           },
           "bias": 0.1,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false,
           "dropout": null,
           "dropout_seed": 0
@@ -308,7 +325,11 @@
         "memory_decay": 0,
         "trainable": false
       },
-      "post_memory": []
+      "post_memory": [
+        {
+          "function": "relu"
+        }
+      ]
     },
     {
       "name": "fc7",
@@ -333,7 +354,7 @@
             "seed": 0
           },
           "bias": 0.1,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false,
           "dropout": null,
           "dropout_seed": 0
@@ -344,7 +365,11 @@
         "memory_decay": 0,
         "trainable": false
       },
-      "post_memory": []
+      "post_memory": [
+        {
+          "function": "relu"
+        }
+      ]
     },
     {
       "name": "fc8",

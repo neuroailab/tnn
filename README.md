@@ -21,6 +21,7 @@ Look at `tutorials`.
 - Daniel L.K. Yamins (Stanford)
 - Maryann Rui (Berkeley)
 - Harry Bleyan (MIT)
+- Aran Nayebi (Stanford)
 
 # License
 

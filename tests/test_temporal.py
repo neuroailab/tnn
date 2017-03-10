@@ -32,11 +32,11 @@ def test_memory():
     state1, state2 = sess.run([G.node['conv1']['states'], G.node['conv2']['states']])
     for i, (s1, s2) in enumerate(zip(state1, state2)):
         if i == 0:
-            state1_inp = graph.get_tensor_by_name('tconvnet/conv1/relu:0')
-            state2_inp = graph.get_tensor_by_name('tconvnet/conv2/relu:0')
+            state1_inp = graph.get_tensor_by_name('tconvnet/conv1/conv:0')
+            state2_inp = graph.get_tensor_by_name('tconvnet/conv2/conv:0')
         else:
-            state1_inp = graph.get_tensor_by_name('tconvnet/conv1_{}/relu:0'.format(i))
-            state2_inp = graph.get_tensor_by_name('tconvnet/conv2_{}/relu:0'.format(i))
+            state1_inp = graph.get_tensor_by_name('tconvnet/conv1_{}/conv:0'.format(i))
+            state2_inp = graph.get_tensor_by_name('tconvnet/conv2_{}/conv:0'.format(i))
         state1_inp, state2_inp = sess.run([state1_inp, state2_inp])
 
         conv1_state = conv1_state * MEM + state1_inp

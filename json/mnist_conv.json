@@ -35,7 +35,7 @@
             "seed": 0
           },
           "bias": 0,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false
         }
       ],
@@ -45,6 +45,9 @@
         "trainable": false
       },
       "post_memory": [
+        {
+          "function": "relu"
+        },
         {
           "function": "max_pool",
           "ksize": [
@@ -92,7 +95,7 @@
             "seed": 0
           },
           "bias": 0.1,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false
         }
       ],
@@ -102,6 +105,9 @@
         "trainable": false
       },
       "post_memory": [
+        {
+          "function": "relu"
+        },
         {
           "function": "max_pool",
           "ksize": [
@@ -141,7 +147,7 @@
             "seed": 0
           },
           "bias": 0.1,
-          "activation": "relu",
+          "activation": null,
           "batch_norm": false,
           "dropout": null
         }
@@ -151,7 +157,11 @@
         "memory_decay": 0,
         "trainable": false
       },
-      "post_memory": []
+      "post_memory": [
+        {
+          "function": "relu"
+        }
+      ]
     },
     {
       "name": "fc2",
