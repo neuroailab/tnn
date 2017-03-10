@@ -8,10 +8,10 @@
         1
       ],
       "dtype": "float32",
-      "state_init": {
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -64,10 +64,11 @@
     {
       "name": "conv2",
       "shape_from": "conv1",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -120,10 +121,11 @@
     {
       "name": "fc1",
       "shape_from": "conv2",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -154,10 +156,11 @@
     {
       "name": "fc2",
       "shape_from": "fc1",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {

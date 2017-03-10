@@ -71,59 +71,58 @@ def graph_from_json(json_file_name):
         attr['kwargs']['post_memory'] = []
         for kwargs in json_node['post_memory']:
             attr['kwargs']['post_memory'].append(_get_func_from_kwargs(**kwargs))
+        attr['kwargs']['input_init'] = _get_func_from_kwargs(**json_node['input_init'])
         attr['kwargs']['state_init'] = _get_func_from_kwargs(**json_node['state_init'])
-        attr['kwargs']['output_init'] = _get_func_from_kwargs(**json_node['output_init'])
+        attr['kwargs']['dtype'] = json_node['dtype']
         attr['kwargs']['name'] = json_node['name']
 
     return G
 
 
 def init_nodes(G, batch_size=256):
+    """
+    Note: Modifies G in place
+    """
     input_nodes = [n for n in G if len(G.predecessors(n)) == 0]
 
     with tf.Graph().as_default():  # separate graph that we'll destroy right away
-        # initialize input nodes
+        # find output and harbor sizes for input nodes
         for node in input_nodes:
             attr = G.node[node]
             if 'shape' not in attr:
                 raise ValueError('input node {} must have "shape" defined'.format(node))
 
-            kwargs = G.node[node]['kwargs']
+            kwargs = attr['kwargs']
             shape = [batch_size] + attr['shape']
-            kwargs['input_shapes'] = [shape]
-            kwargs['input_dtypes'] = [attr['dtype']]
             kwargs['harbor_shape'] = shape
+            output, state = attr['cell'](**kwargs)()
+            attr['output_shape'] = output.shape.as_list()
 
-            attr['cell'] = attr['cell'](**kwargs)  # iniitialize cell
-            output, state = attr['cell']()
-            attr['output_size'] = output.shape.as_list()
-            attr['state_size'] = state.shape.as_list()
-            attr['dtype'] = output.dtype
-
-        # initialize the remaining nodes
-        init_nodes = input_nodes
+        # find output and initial harbor sizes for input nodes
+        init_nodes = copy.copy(input_nodes)
         while len(init_nodes) < len(G):
             nodes = []
             for node in init_nodes:
                 nodes += [n for n in G.successors(node) if n not in init_nodes]
 
-            for node in nodes:
-                init_preds = [n in init_nodes for n in G.predecessors(node)]
-                if all(init_preds):
+            for node in set(nodes):
+                shape_from = G.node[node]['shape_from']
+                if shape_from in init_nodes:
                     nodes.pop(nodes.index(node))
                     init_nodes.append(node)
-                    attr = G.node[node]
-
                     kwargs = G.node[node]['kwargs']
-                    kwargs['input_shapes'] = [G.node[p]['output_size'] for p in sorted(G.predecessors(node))]
-                    kwargs['input_dtypes'] = [G.node[p]['dtype'] for p in sorted(G.predecessors(node))]
-                    kwargs['harbor_shape'] = G.node[attr['shape_from']]['output_size']
+                    kwargs['harbor_shape'] = G.node[shape_from]['output_shape']#.as_list()
+                    output, state = G.node[node]['cell'](**kwargs)()
+                    G.node[node]['output_shape'] = output.shape.as_list()
 
-                    attr['cell'] = attr['cell'](**kwargs)  # iniitialize cell
-                    output, state = attr['cell']()
-                    attr['output_size'] = output.shape.as_list()
-                    attr['state_size'] = state.shape.as_list()
-                    attr['dtype'] = output.dtype
+    # now correct harbor sizes to the final sizes and initialize cells
+    for node, attr in G.nodes(data=True):
+        if node not in input_nodes:
+            channels = []
+            for pred in G.predecessors(node):
+                channels.append(G.node[pred]['output_shape'][-1])
+            attr['kwargs']['harbor_shape'][-1] = sum(channels)
+        attr['cell'] = attr['cell'](**attr['kwargs'])
 
 
 def unroll(G, input_seq, ntimes=None):
@@ -163,7 +162,6 @@ def unroll(G, input_seq, ntimes=None):
 
     for t in range(ntimes):  # Loop over time
         for node, attr in G.nodes(data=True):  # Loop over nodes
-            # if node not in input_nodes and node not in output_nodes:
             if t == 0:
                 inputs = []
                 if node in input_nodes:
@@ -173,9 +171,7 @@ def unroll(G, input_seq, ntimes=None):
                         inputs.append(None)
                 if all([i is None for i in inputs]):
                     inputs = None
-
                 state = None
-
             else:
                 inputs = []
                 if node in input_nodes:
@@ -188,5 +184,3 @@ def unroll(G, input_seq, ntimes=None):
             output, state = attr['cell'](inputs=inputs, state=state)
             attr['outputs'].append(output)
             attr['states'].append(state)
-
-        tf.get_variable_scope().reuse_variables()

@@ -1,9 +1,9 @@
-import sys, os
+from __future__ import absolute_import, division, print_function
+import os
 
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
-sys.path.append('../../tfutils/master/')
 from tfutils import data, model
 
 SEED = 0
@@ -85,15 +85,14 @@ def alexnet(images, labels, scope, **kwargs):
     m = model.alexnet(images, seed=SEED, **kwargs)
     loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=m.output, labels=labels)
     graph = tf.get_default_graph()
-    targets = {
-            #    'conv1': graph.get_tensor_by_name('/'.join([scope, 'conv1/pool:0'])),
-            #    'conv2': graph.get_tensor_by_name('/'.join([scope, 'conv2/pool:0'])),
-            #    'conv3': graph.get_tensor_by_name('/'.join([scope, 'conv3/relu:0'])),
-            #    'conv4': graph.get_tensor_by_name('/'.join([scope, 'conv4/relu:0'])),
-            #    'conv5': graph.get_tensor_by_name('/'.join([scope, 'conv5/pool:0'])),
-            #    'fc6': graph.get_tensor_by_name('/'.join([scope, 'fc6/relu:0'])),
-            #    'fc7': graph.get_tensor_by_name('/'.join([scope, 'fc7/relu:0'])),
-            #    'fc8': graph.get_tensor_by_name('/'.join([scope, 'fc8/fc:0'])),
+    targets = {'conv1': graph.get_tensor_by_name('/'.join([scope, 'conv1/output:0'])),
+               'conv2': graph.get_tensor_by_name('/'.join([scope, 'conv2/output:0'])),
+               'conv3': graph.get_tensor_by_name('/'.join([scope, 'conv3/output:0'])),
+               'conv4': graph.get_tensor_by_name('/'.join([scope, 'conv4/output:0'])),
+               'conv5': graph.get_tensor_by_name('/'.join([scope, 'conv5/output:0'])),
+               'fc6': graph.get_tensor_by_name('/'.join([scope, 'fc6/output:0'])),
+               'fc7': graph.get_tensor_by_name('/'.join([scope, 'fc7/output:0'])),
+               'fc8': graph.get_tensor_by_name('/'.join([scope, 'fc8/output:0'])),
                'loss': tf.reduce_mean(loss)
                }
     return targets

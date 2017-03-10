@@ -8,10 +8,10 @@
         3
       ],
       "dtype": "float32",
-      "state_init": {
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -30,6 +30,9 @@
           ],
           "padding": "VALID",
           "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
           "bias": 0,
           "activation": "relu",
           "batch_norm": false
@@ -69,10 +72,11 @@
     {
       "name": "conv2",
       "shape_from": "conv1",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -91,6 +95,9 @@
           ],
           "padding": "SAME",
           "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
           "bias": 0,
           "activation": "relu",
           "batch_norm": false
@@ -130,10 +137,11 @@
     {
       "name": "conv3",
       "shape_from": "conv2",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -152,6 +160,9 @@
           ],
           "padding": "SAME",
           "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
           "bias": 0,
           "activation": "relu",
           "batch_norm": false
@@ -167,10 +178,11 @@
     {
       "name": "conv4",
       "shape_from": "conv3",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -189,6 +201,9 @@
           ],
           "padding": "SAME",
           "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
           "bias": 0,
           "activation": "relu",
           "batch_norm": false
@@ -204,10 +219,11 @@
     {
       "name": "conv5",
       "shape_from": "conv4",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -226,6 +242,9 @@
           ],
           "padding": "SAME",
           "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
           "bias": 0,
           "activation": "relu",
           "batch_norm": false
@@ -258,10 +277,11 @@
     {
       "name": "fc6",
       "shape_from": "conv5",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -273,13 +293,14 @@
           "out_depth": 4096,
           "kernel_init": "truncated_normal",
           "kernel_init_kwargs": {
-            "stddev": 0.01
+            "stddev": 0.01,
+            "seed": 0
           },
           "bias": 0.1,
           "activation": "relu",
           "batch_norm": false,
-          "dropout": 0.5,
-          "seed": 0
+          "dropout": null,
+          "dropout_seed": 0
         }
       ],
       "memory": {
@@ -292,10 +313,11 @@
     {
       "name": "fc7",
       "shape_from": "fc6",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -307,13 +329,14 @@
           "out_depth": 4096,
           "kernel_init": "truncated_normal",
           "kernel_init_kwargs": {
-            "stddev": 0.01
+            "stddev": 0.01,
+            "seed": 0
           },
           "bias": 0.1,
           "activation": "relu",
           "batch_norm": false,
-          "dropout": 0.5,
-          "seed": 0
+          "dropout": null,
+          "dropout_seed": 0
         }
       ],
       "memory": {
@@ -326,10 +349,11 @@
     {
       "name": "fc8",
       "shape_from": "fc7",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -341,12 +365,14 @@
           "out_depth": 1000,
           "kernel_init": "truncated_normal",
           "kernel_init_kwargs": {
-            "stddev": 0.01
+            "stddev": 0.01,
+            "seed": 0
           },
           "bias": 0,
           "activation": null,
           "batch_norm": false,
-          "dropout": null
+          "dropout": null,
+          "dropout_seed": 0
         }
       ],
       "memory": {

@@ -6,10 +6,10 @@
         784
       ],
       "dtype": "float32",
-      "state_init": {
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {
@@ -40,10 +40,11 @@
     {
       "name": "fc2",
       "shape_from": "fc1",
-      "state_init": {
+      "dtype": "float32",
+      "input_init": {
         "function": "zeros"
       },
-      "output_init": {
+      "state_init": {
         "function": "zeros"
       },
       "harbor": {

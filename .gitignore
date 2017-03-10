@@ -1,0 +1,7 @@
+*.egg*
+*.pyc
+.idea
+*~
+*.egg-info
+*.DS_store
+.*swp
