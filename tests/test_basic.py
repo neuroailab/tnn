@@ -122,16 +122,11 @@ def train_tnn_alexnet():
     images_plc = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 224, 224, 3])
     labels_plc = tf.placeholder(tf.int64, shape=[BATCH_SIZE])
 
-    ims = np.random.standard_normal([BATCH_SIZE, 224, 224, 3])
-    labels = np.random.randint(1000, size=[BATCH_SIZE])
-    data = {'images': tf.constant(ims.astype(np.float32)),
-            'labels': tf.constant(labels.astype(np.int32))}
-
     with tf.variable_scope('tconvnet'):
         G = main.graph_from_json('json/alexnet.json')
         main.init_nodes(G, batch_size=BATCH_SIZE)
-        main.unroll(G, input_seq=data['images'])
-        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=G.node['fc8']['outputs'][-1], labels=data['labels'])
+        main.unroll(G, input_seq=images_plc)
+        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=G.node['fc8']['outputs'][-1], labels=labels_plc)
         loss = tf.reduce_mean(loss)
 
     optimizer = tf.train.MomentumOptimizer(learning_rate=.01, momentum=.9).minimize(loss)
@@ -176,10 +171,11 @@ def memory_usage():
 
 
 if __name__ == '__main__':
-    test_mnist_fc()
+    train_tnn_alexnet()
+    # test_mnist_fc()
 
-    tf.reset_default_graph()
-    test_mnist_conv()
+    # tf.reset_default_graph()
+    # test_mnist_conv()
 
-    tf.reset_default_graph()
-    test_alexnet()
+    # tf.reset_default_graph()
+    # test_alexnet()
