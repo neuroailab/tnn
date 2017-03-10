@@ -5,7 +5,7 @@ import tqdm
 import numpy as np
 import tensorflow as tf
 
-from tconvnet import main
+from tnn import main
 from tests import setup
 
 BATCH_SIZE = 256
@@ -171,11 +171,10 @@ def memory_usage():
 
 
 if __name__ == '__main__':
-    train_tnn_alexnet()
-    # test_mnist_fc()
+    test_mnist_fc()
 
-    # tf.reset_default_graph()
-    # test_mnist_conv()
+    tf.reset_default_graph()
+    test_mnist_conv()
 
-    # tf.reset_default_graph()
-    # test_alexnet()
+    tf.reset_default_graph()
+    test_alexnet()

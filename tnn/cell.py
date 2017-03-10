@@ -3,12 +3,10 @@ General Functional Cell
 """
 
 from __future__ import absolute_import, division, print_function
-import sys, copy
 
 import tensorflow as tf
 from tensorflow.contrib.rnn import RNNCell
 
-sys.path.insert(0, '../../tfutils/base_class')
 import tfutils.model
 
 

@@ -1,12 +1,12 @@
-# Temporal Convolutional Neural Networks
+# Temporal Neural Networks
 
 Run models in time.
 
 # Installation
 
 ```
-git clone https:/github.com/dicarlolab/tconvnet
-pip install -e tconvnet
+git clone https:/github.com/dicarlolab/tnn
+pip install -e tnn
 ```
 
 *(`-e` installs a developer version such that you can always update your code to the latest)*

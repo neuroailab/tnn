@@ -1,14 +1,12 @@
 from __future__ import absolute_import, division, print_function
 
-import sys, json, itertools, copy
+import json, itertools, copy
 
 import networkx as nx
 import tensorflow as tf
 
-sys.path.insert(0, '../../tfutils/master')
 import tfutils.model
-
-import tconvnet.cell
+import tnn.cell
 
 
 def _get_func_from_kwargs(function, **kwargs):
@@ -16,7 +14,7 @@ def _get_func_from_kwargs(function, **kwargs):
     Guess the function from its name
     """
     try:
-        f = getattr(tconvnet.cell, function)
+        f = getattr(tnn.cell, function)
     except:
         try:
             f = getattr(tfutils.model, function)
@@ -61,7 +59,7 @@ def graph_from_json(json_file_name):
         if 'dtype' in json_node:
             attr['dtype'] = json_node['dtype']
 
-        attr['cell'] = tconvnet.cell.GenFuncCell
+        attr['cell'] = tnn.cell.GenFuncCell
         attr['kwargs'] = {}
         attr['kwargs']['harbor'] = _get_func_from_kwargs(**json_node['harbor'])
         attr['kwargs']['pre_memory'] = []

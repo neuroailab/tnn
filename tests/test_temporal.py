@@ -3,7 +3,7 @@ from __future__ import absolute_import, division, print_function
 import numpy as np
 import tensorflow as tf
 
-from tconvnet import main
+from tnn import main
 
 BATCH_SIZE = 256
 MEM = .5
