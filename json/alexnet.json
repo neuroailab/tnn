@@ -1,0 +1,416 @@
+{
+  "nodes": [
+    {
+      "name": "conv1",
+      "shape": [
+        224,
+        224,
+        3
+      ],
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 96,
+          "ksize": 11,
+          "strides": [
+            1,
+            4,
+            4,
+            1
+          ],
+          "padding": "VALID",
+          "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
+          "bias": 0,
+          "activation": "relu",
+          "batch_norm": false
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": [
+        {
+          "function": "lrn",
+          "depth_radius": 5,
+          "bias": 1,
+          "alpha": 0.0001,
+          "beta": 0.75
+        },
+        {
+          "function": "max_pool",
+          "ksize": [
+            1,
+            3,
+            3,
+            1
+          ],
+          "strides": [
+            1,
+            2,
+            2,
+            1
+          ],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "conv2",
+      "shape_from": "conv1",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 256,
+          "ksize": 5,
+          "strides": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
+          "bias": 0,
+          "activation": "relu",
+          "batch_norm": false
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": [
+        {
+          "function": "lrn",
+          "depth_radius": 5,
+          "bias": 1,
+          "alpha": 0.0001,
+          "beta": 0.75
+        },
+        {
+          "function": "max_pool",
+          "ksize": [
+            1,
+            3,
+            3,
+            1
+          ],
+          "strides": [
+            1,
+            2,
+            2,
+            1
+          ],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "conv3",
+      "shape_from": "conv2",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 384,
+          "ksize": 3,
+          "strides": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
+          "bias": 0,
+          "activation": "relu",
+          "batch_norm": false
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    },
+    {
+      "name": "conv4",
+      "shape_from": "conv3",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 384,
+          "ksize": 3,
+          "strides": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
+          "bias": 0,
+          "activation": "relu",
+          "batch_norm": false
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    },
+    {
+      "name": "conv5",
+      "shape_from": "conv4",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 256,
+          "ksize": 3,
+          "strides": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
+          "bias": 0,
+          "activation": "relu",
+          "batch_norm": false
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": [
+        {
+          "function": "max_pool",
+          "ksize": [
+            1,
+            3,
+            3,
+            1
+          ],
+          "strides": [
+            1,
+            2,
+            2,
+            1
+          ],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "fc6",
+      "shape_from": "conv5",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 4096,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.01,
+            "seed": 0
+          },
+          "bias": 0.1,
+          "activation": "relu",
+          "batch_norm": false,
+          "dropout": null,
+          "dropout_seed": 0
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    },
+    {
+      "name": "fc7",
+      "shape_from": "fc6",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 4096,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.01,
+            "seed": 0
+          },
+          "bias": 0.1,
+          "activation": "relu",
+          "batch_norm": false,
+          "dropout": null,
+          "dropout_seed": 0
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    },
+    {
+      "name": "fc8",
+      "shape_from": "fc7",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 1000,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.01,
+            "seed": 0
+          },
+          "bias": 0,
+          "activation": null,
+          "batch_norm": false,
+          "dropout": null,
+          "dropout_seed": 0
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "conv1",
+      "to": "conv2"
+    },
+    {
+      "from": "conv2",
+      "to": "conv3"
+    },
+    {
+      "from": "conv3",
+      "to": "conv4"
+    },
+    {
+      "from": "conv4",
+      "to": "conv5"
+    },
+    {
+      "from": "conv5",
+      "to": "fc6"
+    },
+    {
+      "from": "fc6",
+      "to": "fc7"
+    },
+    {
+      "from": "fc7",
+      "to": "fc8"
+    }
+  ]
+}

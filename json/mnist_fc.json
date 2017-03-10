@@ -1,0 +1,82 @@
+{
+  "nodes": [
+    {
+      "name": "fc1",
+      "shape": [
+        784
+      ],
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 2048,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.1,
+            "seed": 0
+          },
+          "bias": 0.1,
+          "activation": "relu",
+          "batch_norm": false,
+          "dropout": null
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    },
+    {
+      "name": "fc2",
+      "shape_from": "fc1",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "fc",
+          "out_depth": 10,
+          "kernel_init": "truncated_normal",
+          "kernel_init_kwargs": {
+            "stddev": 0.1,
+            "seed": 0
+          },
+          "bias": 0.1,
+          "activation": null,
+          "batch_norm": false,
+          "dropout": null
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "fc1",
+      "to": "fc2"
+    }
+  ]
+}
