@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
+import os
 import numpy as np
 import tensorflow as tf
 
@@ -9,12 +10,15 @@ BATCH_SIZE = 256
 MEM = .5
 SEED = 0
 
+this_dir = os.path.dirname(os.path.realpath(__file__))
+json_dir = os.path.join(os.path.split(this_dir)[0], 'json')
 
 def test_memory():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 28, 28, 1]).astype(np.float32))
 
     with tf.variable_scope('tconvnet'):
-        G = main.graph_from_json('json/mnist_conv.json')
+        json_path = os.path.join(json_dir, 'alexnet.json')
+        G = main.graph_from_json(json_path)
         for node, attr in G.nodes(data=True):
             if node in ['conv1', 'conv2']:
                 attr['kwargs']['memory'][1]['memory_decay'] = MEM
@@ -71,7 +75,8 @@ def test_bypass():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
     # initialize the tconvnet model
     with tf.variable_scope('tconvnet'):
-        G = main.graph_from_json('json/alexnet.json')
+        json_path = os.path.join(json_dir, 'alexnet.json')
+        G = main.graph_from_json(json_path)
         G.add_edges_from([('conv1', 'conv3'), ('conv1', 'conv5'), ('conv3', 'conv5')])
         main.init_nodes(G, batch_size=BATCH_SIZE)
         main.unroll(G, input_seq=images)
@@ -126,11 +131,27 @@ def test_bypass():
         assert np.array_equal(conv5hr, concatr)
 
 
+def test_bypass2():
+    images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
+    # initialize the tconvnet model
+    with tf.variable_scope('tconvnet'):
+        json_path = os.path.join(json_dir, 'alexnet.json')
+        G = main.graph_from_json(json_path)
+        G.add_edges_from([('conv1', 'conv3'), ('conv2', 'conv4')])
+        main.init_nodes(G, batch_size=BATCH_SIZE)
+        main.unroll(G, input_seq=images)
+
+    test_state_and_output_sizes(G)
+
+    graph = tf.get_default_graph()
+
+
 def test_feedback():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
     # initialize the tconvnet model
     with tf.variable_scope('tconvnet'):
-        G = main.graph_from_json('json/alexnet.json')
+        json_path = os.path.join(json_dir, 'alexnet.json')
+        G = main.graph_from_json(json_path)
         G.add_edges_from([('conv5', 'conv3'), ('conv5', 'conv4'), ('conv4', 'conv3')])
         main.init_nodes(G, batch_size=BATCH_SIZE)
         main.unroll(G, input_seq=images)

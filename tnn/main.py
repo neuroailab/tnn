@@ -109,7 +109,7 @@ def init_nodes(G, batch_size=256):
                     nodes.pop(nodes.index(node))
                     init_nodes.append(node)
                     kwargs = G.node[node]['kwargs']
-                    kwargs['harbor_shape'] = G.node[shape_from]['output_shape']#.as_list()
+                    kwargs['harbor_shape'] = G.node[shape_from]['output_shape'][:]
                     output, state = G.node[node]['cell'](**kwargs)()
                     G.node[node]['output_shape'] = output.shape.as_list()
 
