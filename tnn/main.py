@@ -126,18 +126,21 @@ def init_nodes(G, batch_size=256):
 
 
 def harbor_policy(in_shapes, shape):
+    nchnls = []
     if len(shape) == 4:
-        c = 0
         for shp in in_shapes:
-            assert len(shp) != 2
-            c += shp[-1]
-        new_shape = shape[:-1] + [c]
+            if len(shp) == 4:
+                c  = shp[-1]
+            elif len(shp) == 2:
+                xs, ys = shape[1: 3]
+                s = shp[1]
+                c = int(math.ceil(s / float(xs * ys)))
+            nchnls.append(c)
     elif len(shape) == 2:
-        c = 0
         for shp in in_shapes:
-            c += np.prod(shp[1:])
-        new_shape = shape[:-1] + [c]
-    return new_shape
+            c = np.prod(shp[1:])
+            nchnls.append(c)
+    return shape[:-1] + [sum(nchnls)]
 
 
 def unroll(G, input_seq, ntimes=None):

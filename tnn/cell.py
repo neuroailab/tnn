@@ -4,6 +4,8 @@ General Functional Cell
 
 from __future__ import absolute_import, division, print_function
 
+import math
+
 import tensorflow as tf
 from tensorflow.contrib.rnn import RNNCell
 
@@ -31,7 +33,13 @@ def harbor(inputs, shape):
 
         elif len(shape) == 4:
             if len(inp.shape) == 2:
-                raise ValueError('layers of dim 2 cannot project to layers of dim 4')
+                xs, ys = shape[1: 3]
+                s = inp.shape[1]
+                nchnls = int(math.ceil(s / float(xs * ys)))
+                if s % (xs * ys) != 0:
+                    out_depth = xs * ys * nchnls
+                    inp = tfutils.model.fc(inp, out_depth, name='harbor_imagesizefc_for_' % inp.name)
+                out = tf.reshape(inp, (inp.shape[0], xs, ys, nchnls))
             elif len(inp.shape) == 4:
                 out = tf.image.resize_images(inp, shape[1:3])  # tf.constant(shape))
                 outputs.append(out)

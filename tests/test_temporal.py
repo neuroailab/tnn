@@ -160,6 +160,21 @@ def test_bypass3():
 
     graph = tf.get_default_graph()
 
+
+def test_feedback2():
+    images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
+    # initialize the tconvnet model
+    with tf.variable_scope('tconvnet'):
+        json_path = os.path.join(json_dir, 'alexnet.json')
+        G = main.graph_from_json(json_path)
+        G.add_edges_from([('fc7', 'conv5')])
+        main.init_nodes(G, batch_size=BATCH_SIZE)
+        main.unroll(G, input_seq=images)
+
+    test_state_and_output_sizes(G)
+
+    graph = tf.get_default_graph()
+
     
 def test_feedback():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
