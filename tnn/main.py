@@ -1,9 +1,12 @@
 from __future__ import absolute_import, division, print_function
 
-import json, itertools, copy
+import json
+import itertools
+import copy
 
 import networkx as nx
 import tensorflow as tf
+import numpy as np
 
 import tfutils.model
 import tnn.cell
@@ -116,11 +119,25 @@ def init_nodes(G, batch_size=256):
     # now correct harbor sizes to the final sizes and initialize cells
     for node, attr in G.nodes(data=True):
         if node not in input_nodes:
-            channels = []
-            for pred in G.predecessors(node):
-                channels.append(G.node[pred]['output_shape'][-1])
-            attr['kwargs']['harbor_shape'][-1] = sum(channels)
+            pred_shapes = [G.node[pred]['output_shape'] for pred in G.predecessors(node)]
+            attr['kwargs']['harbor_shape'] = harbor_policy(pred_shapes,
+                                                           attr['kwargs']['harbor_shape'])
         attr['cell'] = attr['cell'](**attr['kwargs'])
+
+
+def harbor_policy(in_shapes, shape):
+    if len(shape) == 4:
+        c = 0
+        for shp in in_shapes:
+            assert len(shp) != 2
+            c += shp[-1]
+        new_shape = shape[:-1] + [c]
+    elif len(shape) == 2:
+        c = 0
+        for shp in in_shapes:
+            c += np.prod(shp[1:])
+        new_shape = shape[:-1] + [c]
+    return new_shape
 
 
 def unroll(G, input_seq, ntimes=None):
