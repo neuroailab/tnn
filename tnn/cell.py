@@ -46,20 +46,10 @@ def harbor(inputs, shape, reuse=None):
                         inp = tfutils.model.fc(inp, out_depth)
                 out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchnls))
             elif len(inp.shape) == 4:
-                out = tf.image.resize_images(inp, shape[1:3])  # tf.constant(shape))
-                outputs.append(out)
-                # h = inp.shape.as_list()[1] // shape[1]
-                # w = inp.shape.as_list()[2] // shape[2]
-                # if [h, w] == list(shape):
-                #     outputs.append(inp)
-                # else:
-                #     out = tf.nn.max_pool(inp,
-                #                          ksize=[1, 3 * h // 2, 3 * w // 2, 1],
-                #                          strides=[1, h, w, 1],
-                #                          padding='SAME')
-                #     outputs.append(out)
+                out = tf.image.resize_images(inp, shape[1:3])
             else:
                 raise ValueError
+            outputs.append(out)
 
         else:
             raise ValueError('harbor cannot process layer of dim {}'.format(len(shape)))

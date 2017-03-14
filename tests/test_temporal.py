@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function
 import os
 import numpy as np
 import tensorflow as tf
+import math
 
 from tnn import main
 
@@ -145,6 +146,46 @@ def test_bypass2():
 
     graph = tf.get_default_graph()
 
+    harbor = graph.get_tensor_by_name('tconvnet/conv1/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 224, 224, 3]
+    harbor = graph.get_tensor_by_name('tconvnet/conv2/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 27, 27, 96]
+    harbor = graph.get_tensor_by_name('tconvnet/conv3/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 14, 14, 96 + 256]
+    harbor = graph.get_tensor_by_name('tconvnet/conv4/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 14, 14, 384 + 256]
+    harbor = graph.get_tensor_by_name('tconvnet/conv5/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 14, 14, 384]
+    harbor = graph.get_tensor_by_name('tconvnet/fc6/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 7, 7, 256]
+    harbor = graph.get_tensor_by_name('tconvnet/fc7/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 4096]
+    harbor = graph.get_tensor_by_name('tconvnet/fc8/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 4096]
+
+    # layer 3 gets inputs from 1 and 2
+    conv3h = graph.get_tensor_by_name('tconvnet/conv3_5/harbor:0')
+    conv1o = G.node['conv1']['outputs'][4]
+    conv1om = tf.image.resize_images(conv1o, size=conv3h.shape[1:3])
+    conv2o = G.node['conv2']['outputs'][4]
+    concat = tf.concat([conv1om, conv2o], axis=3)
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        conv3hr, concatr = sess.run([conv3h, concat])
+        assert np.array_equal(conv3hr, concatr)
+
+
+    # layer 4 gets inputs from 2 and 3
+    conv4h = graph.get_tensor_by_name('tconvnet/conv4_6/harbor:0')
+    conv2o = G.node['conv2']['outputs'][5]
+    conv2om = tf.image.resize_images(conv2o, size=conv4h.shape[1:3])
+    conv3o = G.node['conv3']['outputs'][5]
+    concat = tf.concat([conv2om, conv3o], axis=3)
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        conv4hr, concatr = sess.run([conv4h, concat])
+        assert np.array_equal(conv4hr, concatr)
+
 
 def test_bypass3():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
@@ -160,6 +201,23 @@ def test_bypass3():
 
     graph = tf.get_default_graph()
 
+    harbor = graph.get_tensor_by_name('tconvnet/conv1/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 224, 224, 3]
+    harbor = graph.get_tensor_by_name('tconvnet/conv2/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 27, 27, 96]
+    harbor = graph.get_tensor_by_name('tconvnet/conv3/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 14, 14, 256]
+    harbor = graph.get_tensor_by_name('tconvnet/conv4/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 14, 14, 384]
+    harbor = graph.get_tensor_by_name('tconvnet/conv5/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 14, 14, 384]
+    harbor = graph.get_tensor_by_name('tconvnet/fc6/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 7, 7, 256]
+    harbor = graph.get_tensor_by_name('tconvnet/fc7/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 4096 + 7 * 7 * 256]
+    harbor = graph.get_tensor_by_name('tconvnet/fc8/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 4096]
+    
 
 def test_feedback2():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
@@ -175,6 +233,24 @@ def test_feedback2():
 
     graph = tf.get_default_graph()
 
+    harbor = graph.get_tensor_by_name('tconvnet/conv1/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 224, 224, 3]
+    harbor = graph.get_tensor_by_name('tconvnet/conv2/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 27, 27, 96]
+    harbor = graph.get_tensor_by_name('tconvnet/conv3/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 14, 14, 256]
+    harbor = graph.get_tensor_by_name('tconvnet/conv4/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 14, 14, 384]
+    harbor = graph.get_tensor_by_name('tconvnet/conv5_1/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 14, 14, 384 + int(math.ceil(4096 / (14 * 14)))]
+    harbor = graph.get_tensor_by_name('tconvnet/fc6/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 7, 7, 256]
+    harbor = graph.get_tensor_by_name('tconvnet/fc7/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 4096]
+    harbor = graph.get_tensor_by_name('tconvnet/fc8/harbor:0')
+    assert harbor.shape.as_list() == [BATCH_SIZE, 4096]
+
+    
     
 def test_feedback():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
