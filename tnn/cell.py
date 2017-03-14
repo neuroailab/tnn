@@ -4,6 +4,7 @@ General Functional Cell
 
 from __future__ import absolute_import, division, print_function
 
+import re
 import math
 
 import tensorflow as tf
@@ -32,14 +33,19 @@ def harbor(inputs, shape):
                 raise ValueError
 
         elif len(shape) == 4:
+            pat = re.compile(':|/')
             if len(inp.shape) == 2:
                 xs, ys = shape[1: 3]
-                s = inp.shape[1]
+                s = inp.shape.as_list()[1]
                 nchnls = int(math.ceil(s / float(xs * ys)))
                 if s % (xs * ys) != 0:
                     out_depth = xs * ys * nchnls
-                    inp = tfutils.model.fc(inp, out_depth, name='harbor_imagesizefc_for_' % inp.name)
-                out = tf.reshape(inp, (inp.shape[0], xs, ys, nchnls))
+                    nm = pat.sub('__', inp.name.split('/')[1].split('_')[0])
+                    nm = 'harbor_imsizefc_for_%s' % nm
+                    inp = tfutils.model.fc(inp, out_depth,
+                                           wname=nm + '_weights',
+                                           bname=nm + '_bias')
+                out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchnls))
             elif len(inp.shape) == 4:
                 out = tf.image.resize_images(inp, shape[1:3])  # tf.constant(shape))
                 outputs.append(out)
@@ -138,7 +144,7 @@ class GenFuncCell(RNNCell):
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
             harbor_output = self.harbor[0](inputs, self.harbor_shape, **self.harbor[1])
-
+            
             for function, kwargs in self.pre_memory:
                 output = function(harbor_output, **kwargs)
 

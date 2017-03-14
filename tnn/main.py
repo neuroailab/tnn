@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function
 import json
 import itertools
 import copy
+import math
 
 import networkx as nx
 import tensorflow as tf
@@ -185,8 +186,16 @@ def unroll(G, input_seq, ntimes=None):
                 if node in input_nodes:
                     inputs.append(input_seq[t])
                 else:
+                    #for pred in sorted(G.predecessors(node)):
+                    #    inputs.append(None)
                     for pred in sorted(G.predecessors(node)):
-                        inputs.append(None)
+                        cell = G.node[pred]['cell']
+                        output_shape = G.node[pred]['output_shape']
+                        _inp = cell.input_init[0](shape=output_shape,
+                                                  name=pred + '/standin',
+                                                  **cell.input_init[1])
+                        inputs.append(_inp)
+                        
                 if all([i is None for i in inputs]):
                     inputs = None
                 state = None
