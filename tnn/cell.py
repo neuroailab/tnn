@@ -13,7 +13,7 @@ from tensorflow.contrib.rnn import RNNCell
 import tfutils.model
 
 
-def harbor(inputs, shape):
+def harbor(inputs, shape, reuse=None):
     """
     Default harbor function that resizes inputs to desired shape and concats them.
 
@@ -42,9 +42,8 @@ def harbor(inputs, shape):
                     out_depth = xs * ys * nchnls
                     nm = pat.sub('__', inp.name.split('/')[1].split('_')[0])
                     nm = 'harbor_imsizefc_for_%s' % nm
-                    inp = tfutils.model.fc(inp, out_depth,
-                                           wname=nm + '_weights',
-                                           bname=nm + '_bias')
+                    with tf.variable_scope(nm, reuse=reuse):
+                        inp = tfutils.model.fc(inp, out_depth)
                 out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchnls))
             elif len(inp.shape) == 4:
                 out = tf.image.resize_images(inp, shape[1:3])  # tf.constant(shape))
@@ -143,7 +142,7 @@ class GenFuncCell(RNNCell):
             if inputs is None:
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
-            harbor_output = self.harbor[0](inputs, self.harbor_shape, **self.harbor[1])
+            harbor_output = self.harbor[0](inputs, self.harbor_shape, reuse=self._reuse, **self.harbor[1])
             
             for function, kwargs in self.pre_memory:
                 output = function(harbor_output, **kwargs)
