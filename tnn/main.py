@@ -184,6 +184,7 @@ def unroll(G, input_seq, ntimes=None):
     """
     # find the longest path from the inputs to the outputs:
     input_nodes = input_seq.keys()
+    check_inputs(G, input_nodes)
     output_nodes = [n for n in G if len(G.successors(n)) == 0]
     inp_out = itertools.product(input_nodes, output_nodes)
     paths = []
