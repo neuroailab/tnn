@@ -192,8 +192,7 @@ def unroll(G, input_seq, ntimes=None):
     for k in input_seq.keys():
         input_val = input_seq[k]
         if not isinstance(input_val, (tuple, list)):
-            input_val = [input_val] * ntimes
-            input_seq[k] = input_val
+            input_seq[k] = [input_val] * ntimes
 
     for node, attr in G.nodes(data=True):
         attr['outputs'] = []
