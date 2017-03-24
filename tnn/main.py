@@ -84,11 +84,6 @@ def graph_from_json(json_file_name):
 def check_inputs(G, input_nodes):
     '''Given a networkx graph G and a set of input_nodes,
     checks whether the inputs are valid'''
-    if input_nodes is None:
-        raise ValueError('Input nodes must be specified beforehand.')
-
-    if not isinstance(input_nodes, (tuple, list)):
-        input_nodes = [input_nodes]
 
     for n in input_nodes:
         if n not in G.nodes():
@@ -97,8 +92,7 @@ def check_inputs(G, input_nodes):
     input_cover = set([])
     for n in input_nodes:
         input_cover |= (set([n]) | set(nx.descendants(G, n)))
- 
-    if input_cover != set(G.nodes()):
+     if input_cover != set(G.nodes()):
         raise ValueError('Not all valid input nodes have been provided.')
 
 
@@ -199,6 +193,7 @@ def unroll(G, input_seq, ntimes=None):
         input_val = input_seq[k]
         if not isinstance(input_val, (tuple, list)):
             input_val = [input_val] * ntimes
+            input_seq[k] = input_val
 
     for node, attr in G.nodes(data=True):
         attr['outputs'] = []
