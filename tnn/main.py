@@ -81,10 +81,9 @@ def graph_from_json(json_file_name):
     return G
 
 
-def init_nodes(G, input_nodes=['conv1'], batch_size=256):
-    """
-    Note: Modifies G in place
-    """
+def check_inputs(G, input_nodes):
+    '''Given a networkx graph G and a set of input_nodes,
+    checks whether the inputs are valid'''
     if input_nodes is None:
         raise ValueError('Input nodes must be specified beforehand.')
 
@@ -101,6 +100,14 @@ def init_nodes(G, input_nodes=['conv1'], batch_size=256):
  
     if input_cover != set(G.nodes()):
         raise ValueError('Not all valid input nodes have been provided.')
+
+
+def init_nodes(G, input_nodes=['conv1'], batch_size=256):
+    """
+    Note: Modifies G in place
+    """
+
+    check_inputs(G, input_nodes)
 
     with tf.Graph().as_default():  # separate graph that we'll destroy right away
         # find output and harbor sizes for input nodes
@@ -169,14 +176,14 @@ def unroll(G, input_seq, ntimes=None):
     :Args:
         - G
             NetworkX DiGraph that stores initialized GenFuncCell in 'cell' nodes
-        - input_dict (dict)
-            A dict of inputs
+        - input_seq (dict)
+            A dict of inputs that specifies the input for each input node as its keys
     :Kwargs:
         - ntimes (int or None, default: None)
             The number of time steps
     """
     # find the longest path from the inputs to the outputs:
-    input_nodes = [n for n in G if len(G.predecessors(n)) == 0]
+    input_nodes = input_seq.keys()
     output_nodes = [n for n in G if len(G.successors(n)) == 0]
     inp_out = itertools.product(input_nodes, output_nodes)
     paths = []
@@ -187,8 +194,10 @@ def unroll(G, input_seq, ntimes=None):
     if ntimes is None:
         ntimes = longest_path_len
 
-    if not isinstance(input_seq, (tuple, list)):
-        input_seq = [input_seq] * ntimes
+    for k in input_seq.keys():
+        input_val = input_seq[k]
+        if not isinstance(input_val, (tuple, list)):
+            input_val = [input_val] * ntimes
 
     for node, attr in G.nodes(data=True):
         attr['outputs'] = []
@@ -199,7 +208,7 @@ def unroll(G, input_seq, ntimes=None):
             if t == 0:
                 inputs = []
                 if node in input_nodes:
-                    inputs.append(input_seq[t])
+                    inputs.append(input_seq[node][t])
                 else:
                     #for pred in sorted(G.predecessors(node)):
                     #    inputs.append(None)
@@ -217,7 +226,7 @@ def unroll(G, input_seq, ntimes=None):
             else:
                 inputs = []
                 if node in input_nodes:
-                    inputs.append(input_seq[t])
+                    inputs.append(input_seq[node][t])
                 else:
                     for pred in sorted(G.predecessors(node)):
                         inputs.append(G.node[pred]['outputs'][t-1])
