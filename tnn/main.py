@@ -81,11 +81,26 @@ def graph_from_json(json_file_name):
     return G
 
 
-def init_nodes(G, batch_size=256):
+def init_nodes(G, input_nodes=['conv1'], batch_size=256):
     """
     Note: Modifies G in place
     """
-    input_nodes = [n for n in G if len(G.predecessors(n)) == 0]
+    if input_nodes is None:
+        raise ValueError('Input nodes must be specified beforehand.')
+
+    if not isinstance(input_nodes, (tuple, list)):
+        input_nodes = [input_nodes]
+
+    for n in input_nodes:
+        if n not in G.nodes():
+            raise ValueError('The input nodes provided must all be in the graph.')
+
+    input_cover = set([])
+    for n in input_nodes:
+        input_cover |= (set([n]) | set(nx.descendants(G, n)))
+ 
+    if input_cover != set(G.nodes()):
+        raise ValueError('Not all valid input nodes have been provided.')
 
     with tf.Graph().as_default():  # separate graph that we'll destroy right away
         # find output and harbor sizes for input nodes
