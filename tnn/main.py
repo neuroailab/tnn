@@ -92,7 +92,7 @@ def check_inputs(G, input_nodes):
     input_cover = set([])
     for n in input_nodes:
         input_cover |= (set([n]) | set(nx.descendants(G, n)))
-     if input_cover != set(G.nodes()):
+    if input_cover != set(G.nodes()):
         missed_nodes = ', '.join(list(set(G.nodes()) - input_cover))
         raise ValueError('Not all valid input nodes have been provided. The following nodes have been missed: {}'.format(missed_nodes))
 
