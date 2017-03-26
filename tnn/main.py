@@ -94,7 +94,7 @@ def check_inputs(G, input_nodes):
         input_cover |= (set([n]) | set(nx.descendants(G, n)))
     if input_cover != set(G.nodes()):
         missed_nodes = ', '.join(list(set(G.nodes()) - input_cover))
-        raise ValueError('Not all valid input nodes have been provided. The following nodes have been missed: {}'.format(missed_nodes))
+        raise ValueError('Not all valid input nodes have been provided, as the following nodes will not receive any data: {}'.format(missed_nodes))
 
 
 def init_nodes(G, input_nodes=['conv1'], batch_size=256):
