@@ -14,6 +14,7 @@ SEED = 0
 this_dir = os.path.dirname(os.path.realpath(__file__))
 json_dir = os.path.join(os.path.split(this_dir)[0], 'json')
 
+
 def test_memory():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 28, 28, 1]).astype(np.float32))
 
@@ -217,7 +218,7 @@ def test_bypass3():
     assert harbor.shape.as_list() == [BATCH_SIZE, 4096 + 7 * 7 * 256]
     harbor = graph.get_tensor_by_name('tconvnet/fc8/harbor:0')
     assert harbor.shape.as_list() == [BATCH_SIZE, 4096]
-    
+
 
 def test_feedback2():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
@@ -250,8 +251,8 @@ def test_feedback2():
     harbor = graph.get_tensor_by_name('tconvnet/fc8/harbor:0')
     assert harbor.shape.as_list() == [BATCH_SIZE, 4096]
 
-    
-    
+
+
 def test_feedback():
     images = tf.constant(np.random.standard_normal([BATCH_SIZE, 224, 224, 3]).astype(np.float32))
     # initialize the tconvnet model

@@ -133,7 +133,7 @@ class GenFuncCell(RNNCell):
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
             harbor_output = self.harbor[0](inputs, self.harbor_shape, reuse=self._reuse, **self.harbor[1])
-            
+
             for function, kwargs in self.pre_memory:
                 output = function(harbor_output, **kwargs)
 
@@ -147,8 +147,7 @@ class GenFuncCell(RNNCell):
             output = self.state
             for function, kwargs in self.post_memory:
                 output = function(output, **kwargs)
-
-            self.output = tf.cast(output, self.dtype, name='output')
+            self.output = tf.identity(tf.cast(output, self.dtype), name='output')
             # scope.reuse_variables()
             self._reuse = True
         self.state_shape = self.state.shape

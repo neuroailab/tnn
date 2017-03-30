@@ -34,6 +34,7 @@
             "seed": 0
           },
           "bias": 0,
+          "weight_decay": 0.0005,
           "activation": null,
           "batch_norm": false
         }
@@ -102,6 +103,7 @@
             "seed": 0
           },
           "bias": 0,
+          "weight_decay": 0.0005,
           "activation": null,
           "batch_norm": false
         }
@@ -170,6 +172,7 @@
             "seed": 0
           },
           "bias": 0,
+          "weight_decay": 0.0005,
           "activation": null,
           "batch_norm": false
         }
@@ -215,6 +218,7 @@
             "seed": 0
           },
           "bias": 0,
+          "weight_decay": 0.0005,
           "activation": null,
           "batch_norm": false
         }
@@ -260,6 +264,7 @@
             "seed": 0
           },
           "bias": 0,
+          "weight_decay": 0.0005,
           "activation": null,
           "batch_norm": false
         }
@@ -314,9 +319,10 @@
             "seed": 0
           },
           "bias": 0.1,
+          "weight_decay": 0.0005,
           "activation": null,
           "batch_norm": false,
-          "dropout": null,
+          "dropout": 0.5,
           "dropout_seed": 0
         }
       ],
@@ -354,9 +360,10 @@
             "seed": 0
           },
           "bias": 0.1,
+          "weight_decay": 0.0005,
           "activation": null,
           "batch_norm": false,
-          "dropout": null,
+          "dropout": 0.5,
           "dropout_seed": 0
         }
       ],
@@ -394,6 +401,7 @@
             "seed": 0
           },
           "bias": 0,
+          "weight_decay": 0.0005,
           "activation": null,
           "batch_norm": false,
           "dropout": null,
