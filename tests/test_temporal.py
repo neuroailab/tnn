@@ -24,8 +24,8 @@ def test_memory():
         for node, attr in G.nodes(data=True):
             if node in ['conv1', 'conv2']:
                 attr['kwargs']['memory'][1]['memory_decay'] = MEM
-        main.init_nodes(G, batch_size=BATCH_SIZE)
-        main.unroll(G, input_seq=images, ntimes=6)
+        main.init_nodes(G, input_nodes=['conv1'], batch_size=BATCH_SIZE)
+        main.unroll(G, input_seq={'conv1': images}, ntimes=6)
 
     init = tf.global_variables_initializer()
     sess = tf.Session()
@@ -80,8 +80,8 @@ def test_bypass():
         json_path = os.path.join(json_dir, 'alexnet.json')
         G = main.graph_from_json(json_path)
         G.add_edges_from([('conv1', 'conv3'), ('conv1', 'conv5'), ('conv3', 'conv5')])
-        main.init_nodes(G, batch_size=BATCH_SIZE)
-        main.unroll(G, input_seq=images)
+        main.init_nodes(G, input_nodes=['conv1'], batch_size=BATCH_SIZE)
+        main.unroll(G, input_seq={'conv1': images})
 
     test_state_and_output_sizes(G)
 
@@ -140,8 +140,8 @@ def test_bypass2():
         json_path = os.path.join(json_dir, 'alexnet.json')
         G = main.graph_from_json(json_path)
         G.add_edges_from([('conv1', 'conv3'), ('conv2', 'conv4')])
-        main.init_nodes(G, batch_size=BATCH_SIZE)
-        main.unroll(G, input_seq=images)
+        main.init_nodes(G, input_nodes=['conv1'], batch_size=BATCH_SIZE)
+        main.unroll(G, input_seq={'conv1': images})
 
     test_state_and_output_sizes(G)
 
@@ -195,8 +195,8 @@ def test_bypass3():
         json_path = os.path.join(json_dir, 'alexnet.json')
         G = main.graph_from_json(json_path)
         G.add_edges_from([('conv5', 'fc7')])
-        main.init_nodes(G, batch_size=BATCH_SIZE)
-        main.unroll(G, input_seq=images)
+        main.init_nodes(G, input_nodes=['conv1'], batch_size=BATCH_SIZE)
+        main.unroll(G, input_seq={'conv1': images})
 
     test_state_and_output_sizes(G)
 
@@ -227,8 +227,8 @@ def test_feedback2():
         json_path = os.path.join(json_dir, 'alexnet.json')
         G = main.graph_from_json(json_path)
         G.add_edges_from([('fc7', 'conv5')])
-        main.init_nodes(G, batch_size=BATCH_SIZE)
-        main.unroll(G, input_seq=images)
+        main.init_nodes(G, input_nodes=['conv1'], batch_size=BATCH_SIZE)
+        main.unroll(G, input_seq={'conv1': images})
 
     test_state_and_output_sizes(G)
 
@@ -260,8 +260,8 @@ def test_feedback():
         json_path = os.path.join(json_dir, 'alexnet.json')
         G = main.graph_from_json(json_path)
         G.add_edges_from([('conv5', 'conv3'), ('conv5', 'conv4'), ('conv4', 'conv3')])
-        main.init_nodes(G, batch_size=BATCH_SIZE)
-        main.unroll(G, input_seq=images)
+        main.init_nodes(G, input_nodes=['conv1'], batch_size=BATCH_SIZE)
+        main.unroll(G, input_seq={'conv1': images})
 
     test_state_and_output_sizes(G)
 
@@ -316,10 +316,14 @@ def test_feedback():
 
 
 if __name__ == '__main__':
-    test_memory()
+#    test_memory()
 
-    tf.reset_default_graph()
-    test_bypass()
+#    tf.reset_default_graph()
+#    test_bypass()
 
-    tf.reset_default_graph()
-    test_feedback()
+#    tf.reset_default_graph()
+#    test_feedback()
+
+#    tf.reset_default_graph()
+    test_feedback2()
+
