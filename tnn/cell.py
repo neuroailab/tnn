@@ -132,11 +132,10 @@ class GenFuncCell(RNNCell):
             if inputs is None:
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
-            harbor_output = self.harbor[0](inputs, self.harbor_shape, reuse=self._reuse, **self.harbor[1])
+            output = self.harbor[0](inputs, self.harbor_shape, reuse=self._reuse, **self.harbor[1])
        
             pre_name_counter = 0
             for function, kwargs in self.pre_memory:
-                output = harbor_output
                 with tf.variable_scope("pre_" + str(pre_name_counter), reuse=self._reuse):
                     output = function(output, **kwargs)
                 pre_name_counter += 1
