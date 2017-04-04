@@ -14,7 +14,7 @@ with codecs.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setuptools.setup(
     name='tnn',
-    version=tnn.__version__,
+#    version=tnn.__version__,
     description='Temporal Neural Networks',
     long_description=long_description,
     url='https://github.com/dicarlolab/tnn',
