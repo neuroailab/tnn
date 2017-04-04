@@ -136,8 +136,9 @@ class GenFuncCell(RNNCell):
        
             pre_name_counter = 0
             for function, kwargs in self.pre_memory:
+                output = harbor_output
                 with tf.variable_scope("pre_" + str(pre_name_counter), reuse=self._reuse):
-                    output = function(harbor_output, **kwargs)
+                    output = function(output, **kwargs)
                 pre_name_counter += 1
             if state is None:
                 state = self.state_init[0](shape=output.shape,
