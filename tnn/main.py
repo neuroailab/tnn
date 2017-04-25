@@ -97,11 +97,10 @@ def check_inputs(G, input_nodes):
         raise ValueError('Not all valid input nodes have been provided, as the following nodes will not receive any data: {}'.format(missed_nodes))
 
 
-def init_nodes(G, input_nodes=['conv1'], batch_size=256):
+def init_nodes(G, input_nodes, batch_size=256):
     """
     Note: Modifies G in place
     """
-
     check_inputs(G, input_nodes)
 
     with tf.Graph().as_default():  # separate graph that we'll destroy right away
@@ -205,17 +204,14 @@ def unroll(G, input_seq, ntimes=None):
                 inputs = []
                 if node in input_nodes:
                     inputs.append(input_seq[node][t])
-                else:
-                    #for pred in sorted(G.predecessors(node)):
-                    #    inputs.append(None)
-                    for pred in sorted(G.predecessors(node)):
-                        cell = G.node[pred]['cell']
-                        output_shape = G.node[pred]['output_shape']
-                        _inp = cell.input_init[0](shape=output_shape,
-                                                  name=pred + '/standin',
-                                                  **cell.input_init[1])
-                        inputs.append(_inp)
-                        
+                for pred in sorted(G.predecessors(node)):
+                    cell = G.node[pred]['cell']
+                    output_shape = G.node[pred]['output_shape']
+                    _inp = cell.input_init[0](shape=output_shape,
+                                                name=pred + '/standin',
+                                                **cell.input_init[1])
+                    inputs.append(_inp)
+
                 if all([i is None for i in inputs]):
                     inputs = None
                 state = None
@@ -223,9 +219,8 @@ def unroll(G, input_seq, ntimes=None):
                 inputs = []
                 if node in input_nodes:
                     inputs.append(input_seq[node][t])
-                else:
-                    for pred in sorted(G.predecessors(node)):
-                        inputs.append(G.node[pred]['outputs'][t-1])
+                for pred in sorted(G.predecessors(node)):
+                    inputs.append(G.node[pred]['outputs'][t-1])
                 state = attr['states'][t-1]
 
             output, state = attr['cell'](inputs=inputs, state=state)
