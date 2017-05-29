@@ -192,11 +192,9 @@ def unroll(G, input_seq, ntimes=None):
     paths = []
     for inp, out in inp_out:
         paths.extend([p for p in nx.all_simple_paths(G, inp, out)])
-    path_lengths = [len(p) for p in paths]
-    if len(path_lengths) > 0:
-        longest_path_len = max(path_lengths)
-    else:
-        longest_path_len = 0
+
+    path_lengths = map(len, paths)
+    longest_path_len = max(path_lengths) if path_lengths else 0
 
     if ntimes is None:
         ntimes = longest_path_len + 1
