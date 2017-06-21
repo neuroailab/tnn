@@ -105,7 +105,7 @@ def check_inputs(G, input_nodes):
         raise ValueError('Not all valid input nodes have been provided, as the following nodes will not receive any data: {}'.format(missed_nodes))
 
 
-def init_nodes(G, input_nodes, batch_size=256, use_custom=True, op1='resize', op2='concat')
+def init_nodes(G, input_nodes, batch_size=256, use_custom=True, op1='resize', op2='concat'):
     """
     Note: Modifies G in place
     """
