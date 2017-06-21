@@ -73,7 +73,7 @@ def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier
             pat = re.compile(':|/')
             if len(inp.shape) == 2:
                 if op2 != 'concat' and inp.shape[1] != shape[1]:
-                    nm = pat.sub('__', inp.name.split('/')[1].split('_')[0])
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'fc_to_fc_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
                         inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init)
@@ -83,7 +83,7 @@ def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier
             elif len(inp.shape) == 4:
                 out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
                 if op2 != 'concat' and out.shape[1] != shape[1]:
-                    nm = pat.sub('__', inp.name.split('/')[1].split('_')[0])
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'fc_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
                         out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init)    
@@ -97,7 +97,7 @@ def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier
             if len(inp.shape) == 2:
                 nchannels = shape[3]
                 if nchannels != inp.shape[1]:
-                    nm = pat.sub('__', inp.name.split('/')[1].split('_')[0])
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'fc_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
                         inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init)
@@ -118,7 +118,7 @@ def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier
                     out = tf.image.resize_images(inp, shape[1:3])
 
                 if op2 != 'concat' and out.shape[3] != shape[3]:
-                    nm = pat.sub('__', inp.name.split('/')[1].split('_')[0])
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'conv_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
                         out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init)
