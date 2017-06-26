@@ -105,7 +105,7 @@ def check_inputs(G, input_nodes):
         raise ValueError('Not all valid input nodes have been provided, as the following nodes will not receive any data: {}'.format(missed_nodes))
 
 
-def init_nodes(G, input_nodes, batch_size=256, use_custom=True, op1='resize', op2='concat'):
+def init_nodes(G, input_nodes, batch_size=256, use_custom=True, spatial_op='resize', channel_op='concat'):
     """
     Note: Modifies G in place
     """
@@ -147,7 +147,7 @@ def init_nodes(G, input_nodes, batch_size=256, use_custom=True, op1='resize', op
             pred_shapes = [G.node[pred]['output_shape'] for pred in G.predecessors(node)]
             if use_custom:
                 attr['kwargs']['harbor_shape'] = custom_harbor_policy(pred_shapes,
-                                                           attr['kwargs']['harbor_shape'], op1=op1, op2=op2)
+                                                           attr['kwargs']['harbor_shape'], spatial_op=spatial_op, channel_op=channel_op)
             else:
                 attr['kwargs']['harbor_shape'] = harbor_policy(pred_shapes,
                                                            attr['kwargs']['harbor_shape'])
@@ -172,7 +172,7 @@ def harbor_policy(in_shapes, shape):
             nchnls.append(c)
     return shape[:-1] + [sum(nchnls)]
 
-def custom_harbor_policy(in_shapes, shape, op1='resize', op2='concat'):
+def custom_harbor_policy(in_shapes, shape, spatial_op='resize', channel_op='concat'):
     nchnls = []
     if len(shape) == 4:
         for shp in in_shapes:
@@ -185,7 +185,7 @@ def custom_harbor_policy(in_shapes, shape, op1='resize', op2='concat'):
         for shp in in_shapes:
             c = np.prod(shp[1:])
             nchnls.append(c)
-    if op2 != 'concat':
+    if channel_op != 'concat':
         return shape
     else:
         return shape[:-1] + [sum(nchnls)]

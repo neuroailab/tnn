@@ -58,7 +58,7 @@ def harbor(inputs, shape, reuse=None):
 
     return output
 
-def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier', reuse=None):
+def custom_harbor(inputs, shape, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
     """
     Custom harbor function that resizes inputs to desired shape and concats them, or can tile, add or multiply
     inputs based on user specification.
@@ -72,7 +72,7 @@ def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier
         if len(shape) == 2:
             pat = re.compile(':|/')
             if len(inp.shape) == 2:
-                if op2 != 'concat' and inp.shape[1] != shape[1]:
+                if channel_op != 'concat' and inp.shape[1] != shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'fc_to_fc_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
@@ -82,7 +82,7 @@ def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier
 
             elif len(inp.shape) == 4:
                 out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
-                if op2 != 'concat' and out.shape[1] != shape[1]:
+                if channel_op != 'concat' and out.shape[1] != shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'fc_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
@@ -107,14 +107,14 @@ def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier
                 out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
 
             elif len(inp.shape) == 4:
-                if op1 == 'tile':
+                if spatial_op == 'tile':
                     inp_height = inp.get_shape().as_list()[1]
                     inp_width = inp.get_shape().as_list()[2]
                     height_multiple = 1 + (shape[1] // inp_height)
                     width_multiple = 1 + (shape[2] // inp_width)
                     tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
                     out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
-                elif op1 == 'crop':
+                elif spatial_op == 'crop':
                     box_ind = tf.constant(range(shape[0]))
                     if 'split' not in inp.name:
                         nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
@@ -132,7 +132,7 @@ def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier
                 else:
                     out = tf.image.resize_images(inp, shape[1:3])
 
-                if op2 != 'concat' and out.shape[3] != shape[3]:
+                if channel_op != 'concat' and out.shape[3] != shape[3]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'conv_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
@@ -144,9 +144,9 @@ def custom_harbor(inputs, shape, op1='resize', op2='concat', kernel_init='xavier
         else:
             raise ValueError('harbor cannot process layer of dim {}'.format(len(shape)))
 
-    if op2 == 'add':
+    if channel_op == 'add':
         output = tf.add_n(outputs, name='harbor')
-    elif op2 == 'multiply':
+    elif channel_op == 'multiply':
         if len(outputs) == 1:
             output = outputs[0]
         else:
