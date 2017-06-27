@@ -105,7 +105,7 @@ def check_inputs(G, input_nodes):
         raise ValueError('Not all valid input nodes have been provided, as the following nodes will not receive any data: {}'.format(missed_nodes))
 
 
-def init_nodes(G, input_nodes, batch_size=256):
+def init_nodes(G, input_nodes, batch_size=256, channel_op='concat'):
     """
     Note: Modifies G in place
     """
@@ -146,27 +146,27 @@ def init_nodes(G, input_nodes, batch_size=256):
         if node not in input_nodes:
             pred_shapes = [G.node[pred]['output_shape'] for pred in G.predecessors(node)]
             attr['kwargs']['harbor_shape'] = harbor_policy(pred_shapes,
-                                                           attr['kwargs']['harbor_shape'])
+                                                           attr['kwargs']['harbor_shape'], channel_op=channel_op)
+
         attr['cell'] = attr['cell'](**attr['kwargs'])
 
-
-def harbor_policy(in_shapes, shape):
+def harbor_policy(in_shapes, shape, channel_op='concat'):
     nchnls = []
     if len(shape) == 4:
         for shp in in_shapes:
             if len(shp) == 4:
-                c  = shp[-1]
+                c = shp[-1]
             elif len(shp) == 2:
-                xs, ys = shape[1: 3]
-                s = shp[1]
-                c = int(math.ceil(s / float(xs * ys)))
+                c = shape[3]
             nchnls.append(c)
     elif len(shape) == 2:
         for shp in in_shapes:
             c = np.prod(shp[1:])
             nchnls.append(c)
-    return shape[:-1] + [sum(nchnls)]
-
+    if channel_op != 'concat':
+        return shape
+    else:
+        return shape[:-1] + [sum(nchnls)]
 
 def unroll(G, input_seq, ntimes=None):
     """
