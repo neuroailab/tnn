@@ -6,16 +6,36 @@ from __future__ import absolute_import, division, print_function
 
 import re
 import math
-
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.rnn import RNNCell
 
 import tfutils.model
 
 
-def harbor(inputs, shape, reuse=None):
+def crop_func(inp, shape, height, width, pat, reuse):
+    box_ind = tf.constant(range(shape[0]))
+    if 'split' not in inp.name:
+        nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+    else:
+        nm = 'split'
+    nm = 'crop_bbox_for_%s' % nm
+    with tf.variable_scope(nm, reuse=reuse):
+        init_val = np.zeros((shape[0], 4))
+        init_val[:, 0:2] = -100
+        init_val[:, 2:] = 100
+        box_init = tf.constant_initializer(init_val) 
+        boxes = tf.get_variable(initializer=box_init,
+                                                shape=[shape[0], 4],
+                                                dtype=tf.float32,
+                                                name='boxes')
+        boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
+    return tf.image.crop_and_resize(inp, boxes, box_ind, tf.constant([height, width]))
+
+
+def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
     """
-    Default harbor function that resizes inputs to desired shape and concats them.
+    Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
     :Args:
         - inputs
@@ -24,10 +44,24 @@ def harbor(inputs, shape, reuse=None):
     outputs = []
     for inp in inputs:
         if len(shape) == 2:
+            pat = re.compile(':|/')
             if len(inp.shape) == 2:
+                if channel_op != 'concat' and inp.shape[1] != shape[1]:
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+                    nm = 'fc_to_fc_harbor_for_%s' % nm
+                    with tf.variable_scope(nm, reuse=reuse):
+                        inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init)
+
                 outputs.append(inp)
+
             elif len(inp.shape) == 4:
                 out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
+                if channel_op != 'concat' and out.shape[1] != shape[1]:
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+                    nm = 'fc_to_conv_harbor_for_%s' % nm
+                    with tf.variable_scope(nm, reuse=reuse):
+                        out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init)    
+
                 outputs.append(out)
             else:
                 raise ValueError
@@ -35,18 +69,44 @@ def harbor(inputs, shape, reuse=None):
         elif len(shape) == 4:
             pat = re.compile(':|/')
             if len(inp.shape) == 2:
-                xs, ys = shape[1: 3]
-                s = inp.shape.as_list()[1]
-                nchnls = int(math.ceil(s / float(xs * ys)))
-                if s % (xs * ys) != 0:
-                    out_depth = xs * ys * nchnls
-                    nm = pat.sub('__', inp.name.split('/')[1].split('_')[0])
-                    nm = 'harbor_imsizefc_for_%s' % nm
+                nchannels = shape[3]
+                if nchannels != inp.shape[1]:
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+                    nm = 'fc_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        inp = tfutils.model.fc(inp, out_depth)
-                out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchnls))
+                        inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init)
+                 
+                xs, ys = shape[1: 3]
+                inp = tf.tile(inp, [1, xs*ys])
+                out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
+
             elif len(inp.shape) == 4:
-                out = tf.image.resize_images(inp, shape[1:3])
+                if spatial_op == 'tile':
+
+                    if preproc == 'crop':
+                        orig_h = inp.shape.as_list()[1]
+                        orig_w = inp.shape.as_list()[2]
+                        inp = crop_func(inp, shape, orig_h, orig_w, pat, reuse) # blow up to original input shape
+
+                    inp_height = inp.get_shape().as_list()[1]
+                    inp_width = inp.get_shape().as_list()[2]
+                    height_multiple = 1 + (shape[1] // inp_height)
+                    width_multiple = 1 + (shape[2] // inp_width)
+                    tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
+                    out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
+                elif spatial_op == 'pad':
+                    out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), inp, dtype=tf.float32)
+                else:
+                    if preproc == 'crop':
+                        out = crop_func(inp, shape, shape[1], shape[2], pat, reuse)
+                    else:
+                        out = tf.image.resize_images(inp, shape[1:3])
+
+                if channel_op != 'concat' and out.shape[3] != shape[3]:
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+                    nm = 'conv_to_conv_harbor_for_%s' % nm
+                    with tf.variable_scope(nm, reuse=reuse):
+                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init)
             else:
                 raise ValueError
             outputs.append(out)
@@ -54,7 +114,18 @@ def harbor(inputs, shape, reuse=None):
         else:
             raise ValueError('harbor cannot process layer of dim {}'.format(len(shape)))
 
-    output = tf.concat(outputs, axis=-1, name='harbor')
+    if channel_op == 'add':
+        output = tf.add_n(outputs, name='harbor')
+    elif channel_op == 'multiply':
+        if len(outputs) == 1:
+            output = outputs[0]
+        else:
+            output = tf.multiply(outputs[0], outputs[1])
+            if len(outputs) > 2:
+                for output_elem in outputs[2:]:
+                    output = tf.multiply(output, output_elem)
+    else:
+        output = tf.concat(outputs, axis=-1, name='harbor')
 
     return output
 
