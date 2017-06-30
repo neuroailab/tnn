@@ -32,6 +32,13 @@ def crop_func(inp, shape, height, width, pat, reuse):
         boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
     return tf.image.crop_and_resize(inp, boxes, box_ind, tf.constant([height, width]))
 
+def tile_func(inp, shape):
+    inp_height = inp.get_shape().as_list()[1]
+    inp_width = inp.get_shape().as_list()[2]
+    height_multiple = 1 + (shape[1] // inp_height)
+    width_multiple = 1 + (shape[2] // inp_width)
+    tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
+    return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
 
 def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
     """
@@ -86,14 +93,10 @@ def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat'
                     if preproc == 'crop':
                         orig_h = inp.shape.as_list()[1]
                         orig_w = inp.shape.as_list()[2]
-                        inp = crop_func(inp, shape, orig_h, orig_w, pat, reuse) # blow up to original input shape
-
-                    inp_height = inp.get_shape().as_list()[1]
-                    inp_width = inp.get_shape().as_list()[2]
-                    height_multiple = 1 + (shape[1] // inp_height)
-                    width_multiple = 1 + (shape[2] // inp_width)
-                    tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
-                    out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
+                        intermediate_inp = crop_func(inp, shape, orig_h, orig_w, pat, reuse) # blow up to original input shape
+                        out = tile_func(intermediate_inp, shape)
+                    else:
+                        out = tile_func(inp, shape)
                 elif spatial_op == 'pad':
                     out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), inp, dtype=tf.float32)
                 else:
