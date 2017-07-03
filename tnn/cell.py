@@ -52,7 +52,8 @@ def crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse):
 
     padded_img = tf.image.resize_image_with_crop_or_pad(cropped_out, ff_in.shape[1], ff_in.shape[2])
     padded_img = tf.multiply(alpha, padded_img)
-    new_in = ff_in + padded_img
+    new_name = ff_in.name + '_mod'
+    new_in = tf.add(ff_in, padded_img, name=new_name)
     return [new_in]
 
 def tile_func(inp, shape):
