@@ -13,24 +13,47 @@ from tensorflow.contrib.rnn import RNNCell
 import tfutils.model
 
 
-def crop_func(inp, shape, height, width, pat, reuse):
-    box_ind = tf.constant(range(shape[0]))
-    if 'split' not in inp.name:
-        nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-    else:
-        nm = 'split'
-    nm = 'crop_bbox_for_%s' % nm
-    with tf.variable_scope(nm, reuse=reuse):
-        init_val = np.zeros((shape[0], 4))
-        init_val[:, 0:2] = -100
-        init_val[:, 2:] = 100
-        box_init = tf.constant_initializer(init_val) 
-        boxes = tf.get_variable(initializer=box_init,
-                                                shape=[shape[0], 4],
-                                                dtype=tf.float32,
-                                                name='boxes')
-        boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
-    return tf.image.crop_and_resize(inp, boxes, box_ind, tf.constant([height, width]))
+def crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse):
+    assert(ff_inpnm is not None)
+    assert(len(shape)==4)
+    non_ffins = []
+    ff_in = None
+    for inp in inputs:
+        pat = re.compile(':|/')
+        if len(inp.shape) == 4: # we only do this for conv inputs
+            if 'split' not in inp.name:
+                nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+            else:
+                nm = 'split'
+            if ff_inpnm != nm: # check this?
+                non_ffins.append(inp)
+            else:
+                ff_in = inp
+
+    assert(len(non_ffins) > 0) # there must be non feedforward inputs
+    assert(ff_in is not None)
+    non_ffins = tf.concat(non_ffins, axis=-1, name='comb')
+
+    mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
+    with tf.variable_scope(mlp_nm, reuse=reuse):
+        mlp_out = tfutils.model.fc(non_ffins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
+
+    alpha = tf.slice(mlp_out, [0, 0], [-1, 1])
+    boxes = tf.slice(mlp_out, [0, 1], [-1, 4])
+    boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
+    offset_height = tf.to_int32(tf.slice(boxes, [0, 0], [-1, 1]))
+    offset_width = tf.to_int32(tf.slice(boxes, [0, 1], [-1, 1]))
+    target_height = tf.slice(boxes, [0, 2], [-1, 1])
+    target_height = tf.to_int32(tf.multiply(target_height, ff_in.shape[1]))
+    target_width = tf.slice(boxes, [0, 3], [-1, 1])
+    target_width = tf.to_int32(tf.multiply(target_height, ff_in.shape[2]))
+    elems = (ff_in, offset_height, offset_width, target_height, target_width)
+    cropped_out = tf.map_fn(lambda x: tf.image.crop_to_bounding_box(x[0], x[1], x[2], x[3], x[4]), elems, dtype=tf.float32)
+
+    padded_img = tf.image.resize_image_with_crop_or_pad(cropped_out, ff_in.shape[1], ff_in.shape[2])
+    padded_img = tf.multiply(alpha, padded_img)
+    new_in = ff_in + padded_img
+    return [new_in]
 
 def tile_func(inp, shape):
     inp_height = inp.get_shape().as_list()[1]
@@ -40,7 +63,7 @@ def tile_func(inp, shape):
     tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
     return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
 
-def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
+def harbor(inputs, shape, ff_inpnm=None, preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -50,6 +73,7 @@ def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat'
     """
     outputs = []
     if preproc == 'crop':
+        inputs = crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse)
 
     for inp in inputs:
         if len(shape) == 2:
@@ -91,21 +115,11 @@ def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat'
 
             elif len(inp.shape) == 4:
                 if spatial_op == 'tile':
-
-                    if preproc == 'crop':
-                        orig_h = inp.shape.as_list()[1]
-                        orig_w = inp.shape.as_list()[2]
-                        intermediate_inp = crop_func(inp, shape, orig_h, orig_w, pat, reuse) # blow up to original input shape
-                        out = tile_func(intermediate_inp, shape)
-                    else:
-                        out = tile_func(inp, shape)
+                    out = tile_func(inp, shape)
                 elif spatial_op == 'pad':
                     out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), inp, dtype=tf.float32)
                 else:
-                    if preproc == 'crop':
-                        out = crop_func(inp, shape, shape[1], shape[2], pat, reuse)
-                    else:
-                        out = tf.image.resize_images(inp, shape[1:3])
+                    out = tf.image.resize_images(inp, shape[1:3])
 
                 if channel_op != 'concat' and out.shape[3] != shape[3]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
