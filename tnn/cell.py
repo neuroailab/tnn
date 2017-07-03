@@ -20,20 +20,24 @@ def crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse):
     ff_in = None
     for inp in inputs:
         pat = re.compile(':|/')
-        if len(inp.shape) == 4: # we only do this for conv inputs
-            if 'split' not in inp.name:
-                nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+        if 'split' not in inp.name:
+            nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+        else:
+            nm = 'split'
+
+        if ff_inpnm != nm: # not a feedforward input
+            if len(inp.shape) == 4: # flatten conv inputs to pass through mlp later
+                reshaped_inp = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
+                non_ffins.append(reshaped_inp)
             else:
-                nm = 'split'
-            if ff_inpnm != nm: # check this?
                 non_ffins.append(inp)
-            else:
-                ff_in = inp
+        else:
+            assert(len(inp.shape)==4) # makes sense to only crop an incoming image
+            ff_in = inp
 
     assert(len(non_ffins) > 0) # there must be non feedforward inputs
     assert(ff_in is not None)
     non_ffins = tf.concat(non_ffins, axis=-1, name='comb')
-
     mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
     with tf.variable_scope(mlp_nm, reuse=reuse):
         mlp_out = tfutils.model.fc(non_ffins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
@@ -92,7 +96,7 @@ def harbor(inputs, shape, ff_inpnm=None, preproc=None, spatial_op='resize', chan
                 out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
                 if channel_op != 'concat' and out.shape[1] != shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_conv_harbor_for_%s' % nm
+                    nm = 'conv_to_fc_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
                         out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init)    
 
