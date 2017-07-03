@@ -50,7 +50,7 @@ def crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse):
     target_height = tf.slice(boxes, [0, 2], [-1, 1])
     target_height = tf.to_int32(tf.multiply(target_height, ff_in.shape[1]))
     target_width = tf.slice(boxes, [0, 3], [-1, 1])
-    target_width = tf.to_int32(tf.multiply(target_height, ff_in.shape[2]))
+    target_width = tf.to_int32(tf.multiply(target_width, ff_in.shape[2]))
     elems = (ff_in, offset_height, offset_width, target_height, target_width)
     cropped_out = tf.map_fn(lambda x: tf.image.crop_to_bounding_box(x[0], x[1], x[2], x[3], x[4]), elems, dtype=tf.float32)
 
