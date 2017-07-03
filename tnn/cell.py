@@ -49,6 +49,8 @@ def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat'
         - shape
     """
     outputs = []
+    if preproc == 'crop':
+
     for inp in inputs:
         if len(shape) == 2:
             pat = re.compile(':|/')
