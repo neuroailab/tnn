@@ -80,10 +80,12 @@ def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_
     target_height = tf.squeeze(tf.to_int32(tf.multiply(target_height, ff_in.shape[1])), axis=-1)
     target_width = tf.slice(boxes, [0, 3], [-1, 1])
     target_width = tf.squeeze(tf.to_int32(tf.multiply(target_width, ff_in.shape[2])), axis=-1)
-    elems = (ff_in, offset_height, offset_width, target_height, target_width)
-    cropped_out = tf.map_fn(lambda x: tf.image.crop_to_bounding_box(image=x[0], offset_height=x[1], offset_width=x[2], target_height=x[3], target_width=x[4]), elems, dtype=tf.float32)
-    pad_elems = (cropped_out, offset_height, offset_width)
-    padded_img = tf.map_fn(lambda x: tf.image.pad_to_bounding_box(image=x[0], offset_height=x[1], offset_width=x[2], target_height=ff_in.shape[1], target_width=ff_in.shape[2]), pad_elems, dtype=tf.float32)
+    elems = (offset_height, offset_width, target_height, target_width)
+    mask = tf.map_fn(lambda x: tf.pad(tf.ones([x[2], x[3], ff_in.shape[3]]), \
+        [[x[0], ff_in.shape[1] - (x[0]+x[2])],[x[1], ff_in.shape[2] - (x[1]+x[3])],[0,0]], \
+        "CONSTANT"), elems, dtype=tf.float32)
+
+    padded_img = tf.multiply(ff_in, mask)
     padded_img = tf.multiply(alpha, padded_img)
     new_name = ff_in.name + '_mod'
     new_in = tf.add(ff_in, padded_img, name=new_name)
