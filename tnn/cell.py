@@ -29,8 +29,10 @@ def crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse):
             if len(inp.shape) == 4: # flatten conv inputs to pass through mlp later
                 reshaped_inp = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
                 non_ffins.append(reshaped_inp)
-            else:
+            elif len(inp.shape) == 2:
                 non_ffins.append(inp)
+            else:
+                raise ValueError
         else:
             assert(len(inp.shape)==4) # makes sense to only crop an incoming image
             ff_in = inp
@@ -42,7 +44,8 @@ def crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse):
     with tf.variable_scope(mlp_nm, reuse=reuse):
         mlp_out = tfutils.model.fc(non_ffins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
 
-    alpha = tf.slice(mlp_out, [0, 0], [-1, 1])
+    alpha = tf.squeeze(tf.slice(mlp_out, [0, 0], [-1, 1]), axis=-1)
+    alpha = tf.nn.tanh(alpha) # we want to potentially have negatives to downweight
     boxes = tf.slice(mlp_out, [0, 1], [-1, 4])
     boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
     offset_height = tf.squeeze(tf.to_int32(tf.slice(boxes, [0, 0], [-1, 1])), axis=-1)
@@ -53,8 +56,8 @@ def crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse):
     target_width = tf.squeeze(tf.to_int32(tf.multiply(target_width, ff_in.shape[2])), axis=-1)
     elems = (ff_in, offset_height, offset_width, target_height, target_width)
     cropped_out = tf.map_fn(lambda x: tf.image.crop_to_bounding_box(image=x[0], offset_height=x[1], offset_width=x[2], target_height=x[3], target_width=x[4]), elems, dtype=tf.float32)
-
-    padded_img = tf.image.resize_image_with_crop_or_pad(cropped_out, ff_in.shape[1], ff_in.shape[2])
+    pad_elems = (cropped_out, offset_height, offset_width)
+    padded_img = tf.map_fn(lambda x: tf.image.pad_to_bounding_box(image=x[0], offset_height=x[1], offset_width=x[2], target_height=ff_in.shape[1], target_width=ff_in.shape[2]), pad_elems, dtype=tf.float32)
     padded_img = tf.multiply(alpha, padded_img)
     new_name = ff_in.name + '_mod'
     new_in = tf.add(ff_in, padded_img, name=new_name)
