@@ -12,37 +12,63 @@ from tensorflow.contrib.rnn import RNNCell
 
 import tfutils.model
 
-
-def crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse):
+def gather_inputs(inputs, l1_inpnm, ff_inpnm, node_nms):
+    '''Helper function that returns the skip, feedforward, and feedback inputs'''
     assert(ff_inpnm is not None)
     assert(len(shape)==4)
-    non_ffins = []
+    assert(node_nms is not None)
+
+    if l1_inpnm not in node_nms:
+        node_nms = [l1_inpnm] + node_nms # easy to forget to add this
+    
+    # determine the skip and possible feedback inputs to this layer
+    ff_idx = 0
+    for idx, elem in enumerate(node_nms):
+        if elem == ff_inpnm:
+            ff_idx = idx
+            break
+
+    skips = node_nms[:ff_idx] # exclude ff input
+    feedbacks = node_nms[ff_idx+1:] # exclude ff input, note no layer has ff_idx to be the last element
+
+    skip_ins = []
+    feedback_ins = []
     ff_in = None
     for inp in inputs:
         pat = re.compile(':|/')
-        if 'split' not in inp.name:
+        if l1_inpnm not in inp.name:
             nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
         else:
-            nm = 'split'
+            nm = l1_inpnm
 
-        if ff_inpnm != nm: # not a feedforward input
-            if len(inp.shape) == 4: # flatten conv inputs to pass through mlp later
-                reshaped_inp = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
-                non_ffins.append(reshaped_inp)
-            elif len(inp.shape) == 2:
-                non_ffins.append(inp)
-            else:
-                raise ValueError
-        else:
+        if ff_inpnm == nm:
             assert(len(inp.shape)==4) # makes sense to only crop an incoming image
             ff_in = inp
+        elif nm in feedbacks: # a feedback input
+            if len(inp.shape) == 4: # flatten conv inputs to pass through mlp later
+                reshaped_inp = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
+                feedback_ins.append(reshaped_inp)
+            elif len(inp.shape) == 2:
+                feedback_ins.append(inp)
+            else:
+                raise ValueError
+        elif nm in skips:
+            skip_ins.append(inp)
+        else:
+            raise ValueError
 
-    assert(len(non_ffins) > 0) # there must be non feedforward inputs
+    return ff_in, skip_ins, feedback_ins
+
+def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse):
+    # note: e.g. node_nms = ['split', 'V1', 'V2', 'V4', 'pIT', 'aIT']
+
+    ff_in, skip_ins, feedback_ins = gather_inputs(inputs, l1_inpnm, ff_inpnm, node_nms)
+    assert(len(feedback_ins) > 0) # there must be feedback inputs
     assert(ff_in is not None)
-    non_ffins = tf.concat(non_ffins, axis=-1, name='comb')
+    feedback_ins = tf.concat(feedback_ins, axis=-1, name='comb')
     mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
     with tf.variable_scope(mlp_nm, reuse=reuse):
-        mlp_out = tfutils.model.fc(non_ffins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
+        mlp_out = tfutils.model.fc(feedback_ins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
 
     alpha = tf.squeeze(tf.slice(mlp_out, [0, 0], [-1, 1]), axis=-1)
     alpha = tf.nn.tanh(alpha) # we want to potentially have negatives to downweight
@@ -61,7 +87,9 @@ def crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse):
     padded_img = tf.multiply(alpha, padded_img)
     new_name = ff_in.name + '_mod'
     new_in = tf.add(ff_in, padded_img, name=new_name)
-    return [new_in]
+
+    new_out = [new_in] + skip_ins # skips will be combined after
+    return new_out
 
 def tile_func(inp, shape):
     inp_height = inp.get_shape().as_list()[1]
@@ -71,7 +99,7 @@ def tile_func(inp, shape):
     tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
     return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
 
-def harbor(inputs, shape, ff_inpnm=None, preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
+def harbor(inputs, shape, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -81,7 +109,7 @@ def harbor(inputs, shape, ff_inpnm=None, preproc=None, spatial_op='resize', chan
     """
     outputs = []
     if preproc == 'crop':
-        inputs = crop_func(inputs, ff_inpnm, shape, kernel_init, channel_op, reuse)
+        inputs = crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse)
 
     for inp in inputs:
         if len(shape) == 2:
