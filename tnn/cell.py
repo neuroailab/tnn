@@ -12,10 +12,9 @@ from tensorflow.contrib.rnn import RNNCell
 
 import tfutils.model
 
-def gather_inputs(inputs, l1_inpnm, ff_inpnm, node_nms):
+def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
     '''Helper function that returns the skip, feedforward, and feedback inputs'''
     assert(ff_inpnm is not None)
-    assert(len(shape)==4)
     assert(node_nms is not None)
 
     if l1_inpnm not in node_nms:
@@ -29,7 +28,7 @@ def gather_inputs(inputs, l1_inpnm, ff_inpnm, node_nms):
             break
 
     skips = node_nms[:ff_idx] # exclude ff input
-    feedbacks = node_nms[ff_idx+1:] # exclude ff input, note no layer has ff_idx to be the last element
+    feedbacks = node_nms[ff_idx+2:] # exclude ff input, note no layer has ff_idx to be the last element
 
     skip_ins = []
     feedback_ins = []
@@ -40,9 +39,8 @@ def gather_inputs(inputs, l1_inpnm, ff_inpnm, node_nms):
             nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
         else:
             nm = l1_inpnm
-
+      
         if ff_inpnm == nm:
-            assert(len(inp.shape)==4) # makes sense to only crop an incoming image
             ff_in = inp
         elif nm in feedbacks: # a feedback input
             if len(inp.shape) == 4: # flatten conv inputs to pass through mlp later
@@ -54,40 +52,41 @@ def gather_inputs(inputs, l1_inpnm, ff_inpnm, node_nms):
                 raise ValueError
         elif nm in skips:
             skip_ins.append(inp)
-        else:
-            raise ValueError
 
     return ff_in, skip_ins, feedback_ins
 
 def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse):
     # note: e.g. node_nms = ['split', 'V1', 'V2', 'V4', 'pIT', 'aIT']
 
-    ff_in, skip_ins, feedback_ins = gather_inputs(inputs, l1_inpnm, ff_inpnm, node_nms)
-    assert(len(feedback_ins) > 0) # there must be feedback inputs
-    assert(ff_in is not None)
+    ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
+    if len(feedback_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+        return inputs
     feedback_ins = tf.concat(feedback_ins, axis=-1, name='comb')
     mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
     with tf.variable_scope(mlp_nm, reuse=reuse):
         mlp_out = tfutils.model.fc(feedback_ins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
 
-    alpha = tf.squeeze(tf.slice(mlp_out, [0, 0], [-1, 1]), axis=-1)
+    alpha = tf.slice(mlp_out, [0, 0], [-1, 1])
+    alpha = tf.expand_dims(tf.expand_dims(alpha, axis=-1), axis=-1)
     alpha = tf.nn.tanh(alpha) # we want to potentially have negatives to downweight
     boxes = tf.slice(mlp_out, [0, 1], [-1, 4])
     boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
     offset_height = tf.squeeze(tf.to_int32(tf.slice(boxes, [0, 0], [-1, 1])), axis=-1)
     offset_width = tf.squeeze(tf.to_int32(tf.slice(boxes, [0, 1], [-1, 1])), axis=-1)
     target_height = tf.slice(boxes, [0, 2], [-1, 1])
-    target_height = tf.squeeze(tf.to_int32(tf.multiply(target_height, ff_in.shape[1])), axis=-1)
+    target_height = tf.squeeze(tf.to_int32(tf.multiply(target_height, ff_in.get_shape().as_list()[1])), axis=-1)
     target_width = tf.slice(boxes, [0, 3], [-1, 1])
-    target_width = tf.squeeze(tf.to_int32(tf.multiply(target_width, ff_in.shape[2])), axis=-1)
+    target_width = tf.squeeze(tf.to_int32(tf.multiply(target_width, ff_in.get_shape().as_list()[2])), axis=-1)
     elems = (offset_height, offset_width, target_height, target_width)
-    mask = tf.map_fn(lambda x: tf.pad(tf.ones([x[2], x[3], ff_in.shape[3]]), \
-        [[x[0], ff_in.shape[1] - (x[0]+x[2])],[x[1], ff_in.shape[2] - (x[1]+x[3])],[0,0]], \
+    mask = tf.map_fn(lambda x: tf.pad(tf.ones([x[2], x[3], ff_in.get_shape().as_list()[3]]), \
+        [[x[0], ff_in.get_shape().as_list()[1] - (x[0]+x[2])], [x[1], ff_in.get_shape().as_list()[2] - (x[1]+x[3])], [0, 0]], \
         "CONSTANT"), elems, dtype=tf.float32)
 
     padded_img = tf.multiply(ff_in, mask)
     padded_img = tf.multiply(alpha, padded_img)
-    new_name = ff_in.name + '_mod'
+    pat = re.compile(':|/')
+    ff_nm = pat.sub('__', ff_in.name.split('/')[-2].split('_')[0])
+    new_name = ff_nm + '_mod'
     new_in = tf.add(ff_in, padded_img, name=new_name)
 
     new_out = [new_in] + skip_ins # skips will be combined after
