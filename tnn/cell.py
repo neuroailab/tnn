@@ -52,7 +52,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
                 raise ValueError
         elif nm in skips:
             skip_ins.append(inp)
-
+    
     return ff_in, skip_ins, feedback_ins
 
 def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse):
@@ -100,7 +100,7 @@ def tile_func(inp, shape):
     tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
     return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
 
-def harbor(inputs, shape, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
+def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -118,7 +118,7 @@ def harbor(inputs, shape, ff_inpnm=None, node_nms=None, l1_inpnm='split', prepro
             if len(inp.shape) == 2:
                 if channel_op != 'concat' and inp.shape[1] != shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_fc_harbor_for_%s' % nm
+                    nm = 'fc_to_fc_harbor_from_%s_to_%s' % (nm, name)
                     with tf.variable_scope(nm, reuse=reuse):
                         inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init)
 
@@ -128,7 +128,7 @@ def harbor(inputs, shape, ff_inpnm=None, node_nms=None, l1_inpnm='split', prepro
                 out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
                 if channel_op != 'concat' and out.shape[1] != shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'conv_to_fc_harbor_for_%s' % nm
+                    nm = 'conv_to_fc_harbor_from_%s_to_%s' % (nm, name)
                     with tf.variable_scope(nm, reuse=reuse):
                         out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init)    
 
@@ -142,7 +142,7 @@ def harbor(inputs, shape, ff_inpnm=None, node_nms=None, l1_inpnm='split', prepro
                 nchannels = shape[3]
                 if nchannels != inp.shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_conv_harbor_for_%s' % nm
+                    nm = 'fc_to_conv_harbor_from_%s_to_%s' % (nm, name)
                     with tf.variable_scope(nm, reuse=reuse):
                         inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init)
                  
@@ -160,7 +160,7 @@ def harbor(inputs, shape, ff_inpnm=None, node_nms=None, l1_inpnm='split', prepro
 
                 if channel_op != 'concat' and out.shape[3] != shape[3]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'conv_to_conv_harbor_for_%s' % nm
+                    nm = 'conv_to_conv_harbor_from_%s_to_%s' % (nm, name)
                     with tf.variable_scope(nm, reuse=reuse):
                         out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init)
             else:
@@ -259,7 +259,7 @@ class GenFuncCell(RNNCell):
             if inputs is None:
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
-            output = self.harbor[0](inputs, self.harbor_shape, reuse=self._reuse, **self.harbor[1])
+            output = self.harbor[0](inputs, self.harbor_shape, self.name, reuse=self._reuse, **self.harbor[1])
        
             pre_name_counter = 0
             for function, kwargs in self.pre_memory:
