@@ -98,13 +98,6 @@ def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_
     clipped_target_width = tf.cast(clipped_target_width, tf.int32)
     rem_height = tf.cast(rem_height, tf.int32)
     rem_width = tf.cast(rem_width, tf.int32)
-    # tf print for debugging
-#    total_height = tf.Print(total_height, [total_height], message = 'total height', summarize = 5)
-#    clipped_target_height = tf.Print(clipped_target_height, [clipped_target_height], message = 'target height', summarize = 5)
-#    rem_height = tf.Print(rem_height, [rem_height], message = 'rem height', summarize = 5)
-#    total_width = tf.Print(total_width, [total_width], message = 'total width', summarize = 5)
-#    clipped_target_width = tf.Print(clipped_target_width, [clipped_target_width], message = 'target width', summarize = 5)
-#    rem_width = tf.Print(rem_width, [rem_width], message = 'rem width', summarize = 5)
     elems = (offset_height, offset_width, clipped_target_height, clipped_target_width, rem_height, rem_width)
     mask = tf.map_fn(lambda x: tf.pad(tf.ones([x[2], x[3], total_depth]), \
         [[x[0], x[4]], [x[1], x[5]], [0, 0]], \
