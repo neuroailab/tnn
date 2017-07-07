@@ -71,12 +71,18 @@ def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_
     alpha = tf.nn.tanh(alpha) # we want to potentially have negatives to downweight
     boxes = tf.slice(mlp_out, [0, 1], [-1, 4])
     boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
-    offset_height = tf.squeeze(tf.to_int32(tf.slice(boxes, [0, 0], [-1, 1])), axis=-1)
-    offset_width = tf.squeeze(tf.to_int32(tf.slice(boxes, [0, 1], [-1, 1])), axis=-1)
+    offset_height = tf.slice(boxes, [0, 0], [-1, 1])
+    offset_height = tf.squeeze(tf.to_int32(tf.multiply(offset_height, ff_in.get_shape().as_list()[1])), axis=-1)
+    offset_width = tf.slice(boxes, [0, 1], [-1, 1])
+    offset_width = tf.squeeze(tf.to_int32(tf.multiply(offset_width, ff_in.get_shape().as_list()[2])), axis=-1)
     target_height = tf.slice(boxes, [0, 2], [-1, 1])
     target_height = tf.squeeze(tf.to_int32(tf.multiply(target_height, ff_in.get_shape().as_list()[1])), axis=-1)
     target_width = tf.slice(boxes, [0, 3], [-1, 1])
     target_width = tf.squeeze(tf.to_int32(tf.multiply(target_width, ff_in.get_shape().as_list()[2])), axis=-1)
+    # clip height and width of bounding box
+    target_height = tf.to_int32(tf.minimum(offset_height + target_height, ff_in.get_shape().as_list()[1]) - offset_height)
+    target_width = tf.to_int32(tf.minimum(offset_width + target_width, ff_in.get_shape().as_list()[2]) - offset_width)
+    # construct mask
     elems = (offset_height, offset_width, target_height, target_width)
     mask = tf.map_fn(lambda x: tf.pad(tf.ones([x[2], x[3], ff_in.get_shape().as_list()[3]]), \
         [[x[0], ff_in.get_shape().as_list()[1] - (x[0]+x[2])], [x[1], ff_in.get_shape().as_list()[2] - (x[1]+x[3])], [0, 0]], \
