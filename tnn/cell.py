@@ -280,18 +280,12 @@ class GenFuncCell(RNNCell):
             if inputs is None:
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
-<<<<<<< HEAD
-
-            output = self.harbor[0](inputs, self.harbor_shape, reuse=self._reuse, **self.harbor[1])
-=======
             output = self.harbor[0](inputs, self.harbor_shape, self.name, reuse=self._reuse, **self.harbor[1])
->>>>>>> ba77424d714af5f0279cbd9954a4448e758fed1f
-       
             pre_name_counter = 0
             for function, kwargs in self.pre_memory:
                 with tf.variable_scope("pre_" + str(pre_name_counter), reuse=self._reuse):
                     if function.__name__ == "component_conv":
-                       output = function(output, inputs, **kwargs)
+                       output = function(output, inputs, **kwargs) # component_conv needs to know the inputs
                     else:
                        output = function(output, **kwargs)
                 pre_name_counter += 1
@@ -306,7 +300,10 @@ class GenFuncCell(RNNCell):
             post_name_counter = 0
             for function, kwargs in self.post_memory:
                 with tf.variable_scope("post_" + str(post_name_counter), reuse=self._reuse):
-                    output = function(output, **kwargs)
+                    if function.__name__ == "component_conv":
+                       output = function(output, inputs, **kwargs)
+                    else:
+                       output = function(output, **kwargs)
                 post_name_counter += 1
             self.output = tf.identity(tf.cast(output, self.dtype), name='output')
             # scope.reuse_variables()
