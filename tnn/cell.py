@@ -12,25 +12,106 @@ from tensorflow.contrib.rnn import RNNCell
 
 import tfutils.model
 
+def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
+    '''Helper function that returns the skip, feedforward, and feedback inputs'''
+    assert(ff_inpnm is not None)
+    assert(node_nms is not None)
 
-def crop_func(inp, shape, height, width, pat, reuse):
-    box_ind = tf.constant(range(shape[0]))
-    if 'split' not in inp.name:
-        nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-    else:
-        nm = 'split'
-    nm = 'crop_bbox_for_%s' % nm
-    with tf.variable_scope(nm, reuse=reuse):
-        init_val = np.zeros((shape[0], 4))
-        init_val[:, 0:2] = -100
-        init_val[:, 2:] = 100
-        box_init = tf.constant_initializer(init_val) 
-        boxes = tf.get_variable(initializer=box_init,
-                                                shape=[shape[0], 4],
-                                                dtype=tf.float32,
-                                                name='boxes')
-        boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
-    return tf.image.crop_and_resize(inp, boxes, box_ind, tf.constant([height, width]))
+    if l1_inpnm not in node_nms:
+        node_nms = [l1_inpnm] + node_nms # easy to forget to add this
+    
+    # determine the skip and possible feedback inputs to this layer
+    ff_idx = 0
+    for idx, elem in enumerate(node_nms):
+        if elem == ff_inpnm:
+            ff_idx = idx
+            break
+
+    skips = node_nms[:ff_idx] # exclude ff input
+    feedbacks = node_nms[ff_idx+2:] # exclude ff input, note no layer has ff_idx to be the last element
+
+    skip_ins = []
+    feedback_ins = []
+    ff_in = None
+    for inp in inputs:
+        pat = re.compile(':|/')
+        if l1_inpnm not in inp.name:
+            nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+        else:
+            nm = l1_inpnm
+      
+        if ff_inpnm == nm:
+            ff_in = inp
+        elif nm in feedbacks: # a feedback input
+            if len(inp.shape) == 4: # flatten conv inputs to pass through mlp later
+                reshaped_inp = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
+                feedback_ins.append(reshaped_inp)
+            elif len(inp.shape) == 2:
+                feedback_ins.append(inp)
+            else:
+                raise ValueError
+        elif nm in skips:
+            skip_ins.append(inp)
+    
+    return ff_in, skip_ins, feedback_ins
+
+def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse):
+    # note: e.g. node_nms = ['split', 'V1', 'V2', 'V4', 'pIT', 'aIT']
+
+    ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
+    if len(feedback_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+        return inputs
+    feedback_ins = tf.concat(feedback_ins, axis=-1, name='comb')
+    mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
+    with tf.variable_scope(mlp_nm, reuse=reuse):
+        mlp_out = tfutils.model.fc(feedback_ins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
+
+    alpha = tf.slice(mlp_out, [0, 0], [-1, 1])
+    alpha = tf.expand_dims(tf.expand_dims(alpha, axis=-1), axis=-1)
+    alpha = tf.nn.tanh(alpha) # we want to potentially have negatives to downweight
+    boxes = tf.slice(mlp_out, [0, 1], [-1, 4])
+    boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
+    # dimensions of original ff
+    total_height = tf.constant(ff_in.get_shape().as_list()[1], dtype=tf.float32)
+    total_width = tf.constant(ff_in.get_shape().as_list()[2], dtype=tf.float32)
+    total_depth = tf.constant(ff_in.get_shape().as_list()[3], dtype=tf.int32)
+    # compute bbox coords
+    offset_height_frac = tf.squeeze(tf.slice(boxes, [0, 0], [-1, 1]), axis=-1)
+    offset_height = tf.floor(total_height * offset_height_frac)
+    offset_width_frac = tf.squeeze(tf.slice(boxes, [0, 1], [-1, 1]), axis=-1)
+    offset_width = tf.floor(total_width * offset_width_frac)
+    target_height_frac = tf.squeeze(tf.slice(boxes, [0, 2], [-1, 1]))
+    target_height = tf.floor(total_height * target_height_frac)
+    target_width_frac = tf.squeeze(tf.slice(boxes, [0, 3], [-1, 1]))
+    target_width = tf.floor(total_width * target_width_frac)
+    # clip height and width of bounding box
+    height_val = tf.minimum(offset_height + target_height, total_height)
+    width_val = tf.minimum(offset_width + target_width, total_width)
+    clipped_target_height = height_val - offset_height
+    clipped_target_width = width_val - offset_width
+    rem_height = total_height - height_val
+    rem_width = total_width - width_val
+    # construct mask
+    offset_height = tf.cast(offset_height, tf.int32)
+    offset_width = tf.cast(offset_width, tf.int32)
+    clipped_target_height = tf.cast(clipped_target_height, tf.int32)
+    clipped_target_width = tf.cast(clipped_target_width, tf.int32)
+    rem_height = tf.cast(rem_height, tf.int32)
+    rem_width = tf.cast(rem_width, tf.int32)
+    elems = (offset_height, offset_width, clipped_target_height, clipped_target_width, rem_height, rem_width)
+    mask = tf.map_fn(lambda x: tf.pad(tf.ones([x[2], x[3], total_depth]), \
+        [[x[0], x[4]], [x[1], x[5]], [0, 0]], \
+        "CONSTANT"), elems, dtype=tf.float32)
+
+    padded_img = tf.multiply(ff_in, mask)
+    padded_img = tf.multiply(alpha, padded_img)
+    pat = re.compile(':|/')
+    ff_nm = pat.sub('__', ff_in.name.split('/')[-2].split('_')[0])
+    new_name = ff_nm + '_mod'
+    new_in = tf.add(ff_in, padded_img, name=new_name)
+
+    new_out = [new_in] + skip_ins # skips will be combined after
+    return new_out
 
 def tile_func(inp, shape):
     inp_height = inp.get_shape().as_list()[1]
@@ -40,7 +121,7 @@ def tile_func(inp, shape):
     tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
     return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
 
-def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
+def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -49,13 +130,16 @@ def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat'
         - shape
     """
     outputs = []
+    if preproc == 'crop':
+        inputs = crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse)
+
     for inp in inputs:
         if len(shape) == 2:
             pat = re.compile(':|/')
             if len(inp.shape) == 2:
                 if channel_op != 'concat' and inp.shape[1] != shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_fc_harbor_for_%s' % nm
+                    nm = 'fc_to_fc_harbor_from_%s_to_%s' % (nm, name)
                     with tf.variable_scope(nm, reuse=reuse):
                         inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init)
 
@@ -65,7 +149,7 @@ def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat'
                 out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
                 if channel_op != 'concat' and out.shape[1] != shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_conv_harbor_for_%s' % nm
+                    nm = 'conv_to_fc_harbor_from_%s_to_%s' % (nm, name)
                     with tf.variable_scope(nm, reuse=reuse):
                         out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init)    
 
@@ -79,7 +163,7 @@ def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat'
                 nchannels = shape[3]
                 if nchannels != inp.shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_conv_harbor_for_%s' % nm
+                    nm = 'fc_to_conv_harbor_from_%s_to_%s' % (nm, name)
                     with tf.variable_scope(nm, reuse=reuse):
                         inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init)
                  
@@ -89,25 +173,15 @@ def harbor(inputs, shape, preproc=None, spatial_op='resize', channel_op='concat'
 
             elif len(inp.shape) == 4:
                 if spatial_op == 'tile':
-
-                    if preproc == 'crop':
-                        orig_h = inp.shape.as_list()[1]
-                        orig_w = inp.shape.as_list()[2]
-                        intermediate_inp = crop_func(inp, shape, orig_h, orig_w, pat, reuse) # blow up to original input shape
-                        out = tile_func(intermediate_inp, shape)
-                    else:
-                        out = tile_func(inp, shape)
+                    out = tile_func(inp, shape)
                 elif spatial_op == 'pad':
                     out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), inp, dtype=tf.float32)
                 else:
-                    if preproc == 'crop':
-                        out = crop_func(inp, shape, shape[1], shape[2], pat, reuse)
-                    else:
-                        out = tf.image.resize_images(inp, shape[1:3])
+                    out = tf.image.resize_images(inp, shape[1:3])
 
                 if channel_op != 'concat' and out.shape[3] != shape[3]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'conv_to_conv_harbor_for_%s' % nm
+                    nm = 'conv_to_conv_harbor_from_%s_to_%s' % (nm, name)
                     with tf.variable_scope(nm, reuse=reuse):
                         out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init)
             else:
@@ -206,8 +280,12 @@ class GenFuncCell(RNNCell):
             if inputs is None:
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
+<<<<<<< HEAD
 
             output = self.harbor[0](inputs, self.harbor_shape, reuse=self._reuse, **self.harbor[1])
+=======
+            output = self.harbor[0](inputs, self.harbor_shape, self.name, reuse=self._reuse, **self.harbor[1])
+>>>>>>> ba77424d714af5f0279cbd9954a4448e758fed1f
        
             pre_name_counter = 0
             for function, kwargs in self.pre_memory:

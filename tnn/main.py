@@ -198,7 +198,6 @@ def unroll(G, input_seq, ntimes=None):
 
     if ntimes is None:
         ntimes = longest_path_len + 1
-        print('default ntimes: ', ntimes)
 
     for k in input_seq.keys():
         input_val = input_seq[k]
