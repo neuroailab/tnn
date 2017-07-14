@@ -220,6 +220,79 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
+def component_conv(inp,
+         inputs_list,
+         out_depth,
+         input_name=None,
+         ksize=[3,3],
+         strides=[1,1,1,1],
+         padding='SAME',
+         kernel_init='zeros',
+         kernel_init_kwargs=None,
+         bias=0,
+         weight_decay=None,
+         activation='relu',
+         batch_norm=True,
+         name='component_conv'
+         ):
+
+    """
+    Function that breaks up the convolutional kernel to its basenet and non basenet components, when given
+the name of its feedforward input. This is useful when loading basenet weights into tnn when using a 
+harbor channel op of concat. Other channel ops should work with tfutils.model.conv just fine.
+    """
+
+    assert input_name is not None
+    # assert out_shape is not None
+    if weight_decay is None:
+        weight_decay = 0.
+    if isinstance(ksize, int):
+        ksize = [ksize, ksize]
+    if kernel_init_kwargs is None:
+        kernel_init_kwargs = {}
+    in_depth = inp.get_shape().as_list()[-1]
+
+    # weights
+    init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
+    kernel_list = []
+    w_idx = 0
+    for input_elem in inputs_list:
+       if input_name is not None and input_name in input_elem.name:
+            kernel = tf.get_variable(initializer=init,
+                            shape=[ksize[0], ksize[1], input_elem.get_shape().as_list()[-1], out_depth],
+                            dtype=tf.float32,
+                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                            name='weights_basenet')
+       else:
+            kernel = tf.get_variable(initializer=init,
+                            shape=[ksize[0], ksize[1], input_elem.get_shape().as_list()[-1], out_depth],
+                            dtype=tf.float32,
+                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                            name='weights_' + str(w_idx))
+
+       kernel_list.append(kernel)
+       w_idx += 1
+
+
+    new_kernel = tf.concat(kernel_list, axis=-2, name='weights')
+    const_init = tfutils.model.initializer(kind='constant', value=bias)
+    biases = tf.get_variable(initializer=const_init,
+                            shape=[out_depth],
+                            dtype=tf.float32,
+                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                            name='bias')
+    # ops
+    conv = tf.nn.conv2d(inp, new_kernel,
+                        strides=strides,
+                        padding=padding)
+    output = tf.nn.bias_add(conv, biases, name=name)
+
+    if activation is not None:
+        output = getattr(tf.nn, activation)(output, name=activation)
+    if batch_norm:
+        output = tf.nn.batch_normalization(output, mean=0, variance=1, offset=None,
+                            scale=None, variance_epsilon=1e-8, name='batch_norm')
+    return output
 
 class GenFuncCell(RNNCell):
 
