@@ -121,7 +121,7 @@ def tile_func(inp, shape):
     tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
     return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
 
-def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', reuse=None):
+def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -139,9 +139,9 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', 
             if len(inp.shape) == 2:
                 if channel_op != 'concat' and inp.shape[1] != shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_fc_harbor_from_%s_to_%s' % (nm, name)
+                    nm = 'fc_to_fc_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init)
+                        inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init, weight_decay=weight_decay)
 
                 outputs.append(inp)
 
@@ -149,9 +149,9 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', 
                 out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
                 if channel_op != 'concat' and out.shape[1] != shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'conv_to_fc_harbor_from_%s_to_%s' % (nm, name)
+                    nm = 'conv_to_fc_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init)    
+                        out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init, weight_decay=weight_decay)    
 
                 outputs.append(out)
             else:
@@ -163,9 +163,9 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', 
                 nchannels = shape[3]
                 if nchannels != inp.shape[1]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_conv_harbor_from_%s_to_%s' % (nm, name)
+                    nm = 'fc_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init)
+                        inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init, weight_decay=weight_decay)
                  
                 xs, ys = shape[1: 3]
                 inp = tf.tile(inp, [1, xs*ys])
@@ -181,9 +181,9 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', 
 
                 if channel_op != 'concat' and out.shape[3] != shape[3]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'conv_to_conv_harbor_from_%s_to_%s' % (nm, name)
+                    nm = 'conv_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init)
+                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, weight_decay=weight_decay)
             else:
                 raise ValueError
             outputs.append(out)
