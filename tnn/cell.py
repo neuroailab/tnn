@@ -121,36 +121,39 @@ def tile_func(inp, shape):
     tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
     return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
 
-def transform_func(inp, shape, weight_decay, reuse):
-    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-    nm = 'spatial_transform_for_%s' % nm
-    with tf.variable_scope(nm, reuse=reuse):
-        resh = tf.reshape(inp, [inp.get_shape().as_list()[0], -1], name='reshape')
-        in_depth = resh.get_shape().as_list()[-1]
-        if weight_decay is None:
-            weight_decay = 0.
+def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
+    orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+    nm = 'spatial_transform_for_%s' % orig_nm
+    if ff_inpnm is not None and ff_inpnm in orig_nm:
+        return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
+    else:
+        with tf.variable_scope(nm, reuse=reuse):
+            resh = tf.reshape(inp, [inp.get_shape().as_list()[0], -1], name='reshape')
+            in_depth = resh.get_shape().as_list()[-1]
+            if weight_decay is None:
+                weight_decay = 0.
 
-        # identity initialization (weights = zeros and biases = identity)
-        kernel = tf.get_variable(initializer=tf.zeros_initializer(),
-                               shape=[in_depth, 6],
-                               dtype=tf.float32,
-                               regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
-                               name='weights')
+            # identity initialization (weights = zeros and biases = identity)
+            kernel = tf.get_variable(initializer=tf.zeros_initializer(),
+                                   shape=[in_depth, 6],
+                                   dtype=tf.float32,
+                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                   name='weights')
 
-        initial_theta = np.array([[1., 0, 0], [0, 1., 0]])
-        initial_theta = initial_theta.astype('float32')
-        initial_theta = initial_theta.flatten()
-        biases = tf.get_variable(initializer=tf.constant_initializer(value=initial_theta),
-                               shape=[out_depth],
-                               dtype=tf.float32,
-                               regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
-                               name='bias')
+            initial_theta = np.array([[1., 0, 0], [0, 1., 0]])
+            initial_theta = initial_theta.astype('float32')
+            initial_theta = initial_theta.flatten()
+            biases = tf.get_variable(initializer=tf.constant_initializer(value=initial_theta),
+                                   shape=[out_depth],
+                                   dtype=tf.float32,
+                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                   name='bias')
 
-        fcm = tf.matmul(resh, kernel)
-        loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
-        out_size = (shape[1], shape[2])
-        h_trans = transformer(inp, loc_out, out_size)
-        return h_trans
+            fcm = tf.matmul(resh, kernel)
+            loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
+            out_size = (shape[1], shape[2])
+            h_trans = transformer(inp, loc_out, out_size)
+            return h_trans
 
 def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, reuse=None):
     """
@@ -208,7 +211,7 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', 
                 elif spatial_op == 'pad':
                     out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), inp, dtype=tf.float32)
                 elif spatial_op == 'sp_transform':
-                    out = transform_func(inp, shape=shape, weight_decay=weight_decay, reuse=reuse)
+                    out = transform_func(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, reuse=reuse)
                 else:
                     out = tf.image.resize_images(inp, shape[1:3])
 
