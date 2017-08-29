@@ -9,7 +9,7 @@ import math
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.rnn import RNNCell
-from spatial_transformer import transformer
+import tnn.spatial_transformer
 import tfutils.model
 
 def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
@@ -122,6 +122,7 @@ def tile_func(inp, shape):
     return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
 
 def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
+    pat = re.compile(':|/')
     orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
     nm = 'spatial_transform_for_%s' % orig_nm
     if ff_inpnm is not None and ff_inpnm in orig_nm:
@@ -144,7 +145,7 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             initial_theta = initial_theta.astype('float32')
             initial_theta = initial_theta.flatten()
             biases = tf.get_variable(initializer=tf.constant_initializer(value=initial_theta),
-                                   shape=[out_depth],
+                                   shape=[6],
                                    dtype=tf.float32,
                                    regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                                    name='bias')
@@ -152,7 +153,7 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             fcm = tf.matmul(resh, kernel)
             loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
             out_size = (shape[1], shape[2])
-            h_trans = transformer(inp, loc_out, out_size)
+            h_trans = tnn.spatial_transformer.transformer(inp, loc_out, out_size)
             return h_trans
 
 def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, reuse=None):
