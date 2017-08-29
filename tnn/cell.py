@@ -124,10 +124,10 @@ def tile_func(inp, shape):
 def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
     pat = re.compile(':|/')
     orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-    nm = 'spatial_transform_for_%s' % orig_nm
     if ff_inpnm is not None and ff_inpnm in orig_nm:
         return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
     else:
+        nm = 'spatial_transform_for_%s' % orig_nm
         with tf.variable_scope(nm, reuse=reuse):
             resh = tf.reshape(inp, [inp.get_shape().as_list()[0], -1], name='reshape')
             in_depth = resh.get_shape().as_list()[-1]
@@ -154,6 +154,9 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
             out_size = (shape[1], shape[2])
             h_trans = tnn.spatial_transformer.transformer(inp, loc_out, out_size)
+            bs = inp.get_shape().as_list()[0]
+            cs = inp.get_shape().as_list()[-1]
+            h_trans.set_shape([bs, shape[1], shape[2], cs])
             return h_trans
 
 def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, reuse=None):
