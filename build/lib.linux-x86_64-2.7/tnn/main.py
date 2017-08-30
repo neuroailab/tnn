@@ -149,7 +149,10 @@ def init_nodes(G, input_nodes, batch_size=256, channel_op='concat', to_exclude=N
                 exclude_preds = to_exclude[node]
                 if not isinstance(exclude_preds, list):
                     exclude_preds = [exclude_preds]
+                print('Node: ', node, 'Exclude preds: ', exclude_preds)
             pred_shapes = [G.node[pred]['output_shape'] for pred in G.predecessors(node) if pred not in exclude_preds]
+            pred_shapes_before = [G.node[pred]['output_shape'] for pred in G.predecessors(node)]
+            print('Node: ', node, 'Pred shapes before: ', pred_shapes_before, 'Pred shapes after: ', pred_shapes, 'harbor shape: ', harbor_policy(pred_shapes, attr['kwargs']['harbor_shape'], channel_op=channel_op))
             attr['kwargs']['harbor_shape'] = harbor_policy(pred_shapes,
                                                            attr['kwargs']['harbor_shape'], channel_op=channel_op)
 
