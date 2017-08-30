@@ -28,7 +28,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
             break
 
     skips = node_nms[:ff_idx] # exclude ff input
-    feedbacks = node_nms[ff_idx+2:] # exclude ff input, note no layer has ff_idx to be the last element
+    feedbacks = node_nms[ff_idx+2:] # exclude ff input and itself, note no layer has ff_idx to be the last element
 
     skip_ins = []
     feedback_ins = []
@@ -55,121 +55,8 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
     
     return ff_in, skip_ins, feedback_ins
 
-def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse):
-    # note: e.g. node_nms = ['split', 'V1', 'V2', 'V4', 'pIT', 'aIT']
-
-    ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
-    if len(feedback_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
-        return inputs
-    feedback_ins = tf.concat(feedback_ins, axis=-1, name='comb')
-    mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
-    with tf.variable_scope(mlp_nm, reuse=reuse):
-        mlp_out = tfutils.model.fc(feedback_ins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
-
-    alpha = tf.slice(mlp_out, [0, 0], [-1, 1])
-    alpha = tf.expand_dims(tf.expand_dims(alpha, axis=-1), axis=-1)
-    alpha = tf.nn.tanh(alpha) # we want to potentially have negatives to downweight
-    boxes = tf.slice(mlp_out, [0, 1], [-1, 4])
-    boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
-    # dimensions of original ff
-    total_height = tf.constant(ff_in.get_shape().as_list()[1], dtype=tf.float32)
-    total_width = tf.constant(ff_in.get_shape().as_list()[2], dtype=tf.float32)
-    total_depth = tf.constant(ff_in.get_shape().as_list()[3], dtype=tf.int32)
-    # compute bbox coords
-    offset_height_frac = tf.squeeze(tf.slice(boxes, [0, 0], [-1, 1]), axis=-1)
-    offset_height = tf.floor(total_height * offset_height_frac)
-    offset_width_frac = tf.squeeze(tf.slice(boxes, [0, 1], [-1, 1]), axis=-1)
-    offset_width = tf.floor(total_width * offset_width_frac)
-    target_height_frac = tf.squeeze(tf.slice(boxes, [0, 2], [-1, 1]))
-    target_height = tf.floor(total_height * target_height_frac)
-    target_width_frac = tf.squeeze(tf.slice(boxes, [0, 3], [-1, 1]))
-    target_width = tf.floor(total_width * target_width_frac)
-    # clip height and width of bounding box
-    height_val = tf.minimum(offset_height + target_height, total_height)
-    width_val = tf.minimum(offset_width + target_width, total_width)
-    clipped_target_height = height_val - offset_height
-    clipped_target_width = width_val - offset_width
-    rem_height = total_height - height_val
-    rem_width = total_width - width_val
-    # construct mask
-    offset_height = tf.cast(offset_height, tf.int32)
-    offset_width = tf.cast(offset_width, tf.int32)
-    clipped_target_height = tf.cast(clipped_target_height, tf.int32)
-    clipped_target_width = tf.cast(clipped_target_width, tf.int32)
-    rem_height = tf.cast(rem_height, tf.int32)
-    rem_width = tf.cast(rem_width, tf.int32)
-    elems = (offset_height, offset_width, clipped_target_height, clipped_target_width, rem_height, rem_width)
-    mask = tf.map_fn(lambda x: tf.pad(tf.ones([x[2], x[3], total_depth]), \
-        [[x[0], x[4]], [x[1], x[5]], [0, 0]], \
-        "CONSTANT"), elems, dtype=tf.float32)
-
-    padded_img = tf.multiply(ff_in, mask)
-    padded_img = tf.multiply(alpha, padded_img)
-    pat = re.compile(':|/')
-    ff_nm = pat.sub('__', ff_in.name.split('/')[-2].split('_')[0])
-    new_name = ff_nm + '_mod'
-    new_in = tf.add(ff_in, padded_img, name=new_name)
-
-    new_out = [new_in] + skip_ins # skips will be combined after
-    return new_out
-
-def tile_func(inp, shape):
-    inp_height = inp.get_shape().as_list()[1]
-    inp_width = inp.get_shape().as_list()[2]
-    height_multiple = 1 + (shape[1] // inp_height)
-    width_multiple = 1 + (shape[2] // inp_width)
-    tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
-    return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
-
-def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
-    pat = re.compile(':|/')
-    orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-    if ff_inpnm is not None and ff_inpnm in orig_nm:
-        return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
-    else:
-        nm = 'spatial_transform_for_%s' % orig_nm
-        with tf.variable_scope(nm, reuse=reuse):
-            resh = tf.reshape(inp, [inp.get_shape().as_list()[0], -1], name='reshape')
-            in_depth = resh.get_shape().as_list()[-1]
-            if weight_decay is None:
-                weight_decay = 0.
-
-            # identity initialization (weights = zeros and biases = identity)
-            kernel = tf.get_variable(initializer=tf.zeros_initializer(),
-                                   shape=[in_depth, 6],
-                                   dtype=tf.float32,
-                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
-                                   name='weights')
-
-            initial_theta = np.array([[1., 0, 0], [0, 1., 0]])
-            initial_theta = initial_theta.astype('float32')
-            initial_theta = initial_theta.flatten()
-            biases = tf.get_variable(initializer=tf.constant_initializer(value=initial_theta),
-                                   shape=[6],
-                                   dtype=tf.float32,
-                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
-                                   name='bias')
-
-            fcm = tf.matmul(resh, kernel)
-            loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
-            out_size = (shape[1], shape[2])
-            h_trans = tnn.spatial_transformer.transformer(inp, loc_out, out_size)
-            bs = inp.get_shape().as_list()[0]
-            cs = inp.get_shape().as_list()[-1]
-            h_trans.set_shape([bs, shape[1], shape[2], cs])
-            return h_trans
-
-def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, reuse=None):
-    """
-    Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
-
-    :Args:
-        - inputs
-        - shape
-    """
-    outputs = []
-    if preproc == 'crop':
-        inputs = crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse)
+def input_aggregator(inputs, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None):
+    '''Helper function that combines the inputs appropriately based on the spatial and channel_ops'''
 
     for inp in inputs:
         if len(shape) == 2:
@@ -242,7 +129,183 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', 
                 for output_elem in outputs[2:]:
                     output = tf.multiply(output, output_elem)
     else:
-        output = tf.concat(outputs, axis=-1, name='harbor')
+        output = tf.concat(outputs, axis=-1, name='harbor')  
+
+def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse):
+    # note: e.g. node_nms = ['split', 'V1', 'V2', 'V4', 'pIT', 'aIT']
+
+    ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
+    if len(feedback_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+        return inputs
+    feedback_ins = tf.concat(feedback_ins, axis=-1, name='comb')
+    mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
+    with tf.variable_scope(mlp_nm, reuse=reuse):
+        mlp_out = tfutils.model.fc(feedback_ins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
+
+    alpha = tf.slice(mlp_out, [0, 0], [-1, 1])
+    alpha = tf.expand_dims(tf.expand_dims(alpha, axis=-1), axis=-1)
+    alpha = tf.nn.tanh(alpha) # we want to potentially have negatives to downweight
+    boxes = tf.slice(mlp_out, [0, 1], [-1, 4])
+    boxes = tf.nn.sigmoid(boxes) # keep values in [0, 1] range
+    # dimensions of original ff
+    total_height = tf.constant(ff_in.get_shape().as_list()[1], dtype=tf.float32)
+    total_width = tf.constant(ff_in.get_shape().as_list()[2], dtype=tf.float32)
+    total_depth = tf.constant(ff_in.get_shape().as_list()[3], dtype=tf.int32)
+    # compute bbox coords
+    offset_height_frac = tf.squeeze(tf.slice(boxes, [0, 0], [-1, 1]), axis=-1)
+    offset_height = tf.floor(total_height * offset_height_frac)
+    offset_width_frac = tf.squeeze(tf.slice(boxes, [0, 1], [-1, 1]), axis=-1)
+    offset_width = tf.floor(total_width * offset_width_frac)
+    target_height_frac = tf.squeeze(tf.slice(boxes, [0, 2], [-1, 1]))
+    target_height = tf.floor(total_height * target_height_frac)
+    target_width_frac = tf.squeeze(tf.slice(boxes, [0, 3], [-1, 1]))
+    target_width = tf.floor(total_width * target_width_frac)
+    # clip height and width of bounding box
+    height_val = tf.minimum(offset_height + target_height, total_height)
+    width_val = tf.minimum(offset_width + target_width, total_width)
+    clipped_target_height = height_val - offset_height
+    clipped_target_width = width_val - offset_width
+    rem_height = total_height - height_val
+    rem_width = total_width - width_val
+    # construct mask
+    offset_height = tf.cast(offset_height, tf.int32)
+    offset_width = tf.cast(offset_width, tf.int32)
+    clipped_target_height = tf.cast(clipped_target_height, tf.int32)
+    clipped_target_width = tf.cast(clipped_target_width, tf.int32)
+    rem_height = tf.cast(rem_height, tf.int32)
+    rem_width = tf.cast(rem_width, tf.int32)
+    elems = (offset_height, offset_width, clipped_target_height, clipped_target_width, rem_height, rem_width)
+    mask = tf.map_fn(lambda x: tf.pad(tf.ones([x[2], x[3], total_depth]), \
+        [[x[0], x[4]], [x[1], x[5]], [0, 0]], \
+        "CONSTANT"), elems, dtype=tf.float32)
+
+    padded_img = tf.multiply(ff_in, mask)
+    padded_img = tf.multiply(alpha, padded_img)
+    pat = re.compile(':|/')
+    ff_nm = pat.sub('__', ff_in.name.split('/')[-2].split('_')[0])
+    new_name = ff_nm + '_mod'
+    new_in = tf.add(ff_in, padded_img, name=new_name)
+
+    new_out = [new_in] + skip_ins # skips will be combined after
+    return new_out
+
+def tile_func(inp, shape):
+    inp_height = inp.get_shape().as_list()[1]
+    inp_width = inp.get_shape().as_list()[2]
+    height_multiple = 1 + (shape[1] // inp_height)
+    width_multiple = 1 + (shape[2] // inp_width)
+    tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
+    return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
+
+def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
+    '''Learn an affine transformation on the input inp if it is a feedback or skip'''
+    pat = re.compile(':|/')
+    orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+    if ff_inpnm is not None and ff_inpnm in orig_nm:
+        return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
+    else:
+        nm = 'spatial_transform_for_%s' % orig_nm
+        with tf.variable_scope(nm, reuse=reuse):
+            resh = tf.reshape(inp, [inp.get_shape().as_list()[0], -1], name='reshape')
+            in_depth = resh.get_shape().as_list()[-1]
+            if weight_decay is None:
+                weight_decay = 0.
+
+            # identity initialization (weights = zeros and biases = identity)
+            kernel = tf.get_variable(initializer=tf.zeros_initializer(),
+                                   shape=[in_depth, 6],
+                                   dtype=tf.float32,
+                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                   name='weights')
+
+            initial_theta = np.array([[1., 0, 0], [0, 1., 0]])
+            initial_theta = initial_theta.astype('float32')
+            initial_theta = initial_theta.flatten()
+            biases = tf.get_variable(initializer=tf.constant_initializer(value=initial_theta),
+                                   shape=[6],
+                                   dtype=tf.float32,
+                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                   name='bias')
+
+            fcm = tf.matmul(resh, kernel)
+            loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
+            out_size = (shape[1], shape[2])
+            assert(len(inp.shape) == 4) # we can only spatial transform on a convolutional input
+            h_trans = tnn.spatial_transformer.transformer(inp, loc_out, out_size)
+            bs = inp.get_shape().as_list()[0]
+            cs = inp.get_shape().as_list()[-1]
+            h_trans.set_shape([bs, shape[1], shape[2], cs])
+            return h_trans
+
+def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse):
+    '''Learn an affine transformation on the feedforward inputs (including skips) using the feedbacks
+    into that layer'''
+    ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
+    new_inputs = [ff_in] + skip_ins
+    # Note you must pass to_exclude to the init_nodes method in main.py if using the concat channel op
+    # since the total number of channels excludes the feedback channels as we are not combining them
+    # otherwise it does not need to change since the number of input channels is unchanged
+    if channel_op == 'concat':
+        print('Make sure to exclude feedback nodes in the main.init_nodes() method!')
+
+    if len(feedback_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+        out_val = input_aggregator(inputs, spatial_op, channel_op, kernel_init, weight_decay, reuse)
+        return out_val
+
+    # combine the skips and the feedforward input
+    ff_out = input_aggregator(new_inputs, spatial_op, channel_op, kernel_init, weight_decay, reuse)
+    feedback_ins = tf.concat(feedback_ins, axis=-1, name='comb')
+    mlp_nm = 'spatial_transform_for_%s' % ff_inpnm
+    # we use the feedbacks to learn our localizer network
+    with tf.variable_scope(mlp_nm, reuse=reuse):
+        # might want to use tfutils fc to shorten this
+        in_depth = feedback_ins.get_shape().as_list()[-1]
+        if weight_decay is None:
+            weight_decay = 0.
+
+        # identity initialization (weights = zeros and biases = identity)
+        kernel = tf.get_variable(initializer=tf.zeros_initializer(),
+                               shape=[in_depth, 6],
+                               dtype=tf.float32,
+                               regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                               name='weights')
+
+        initial_theta = np.array([[1., 0, 0], [0, 1., 0]])
+        initial_theta = initial_theta.astype('float32')
+        initial_theta = initial_theta.flatten()
+        biases = tf.get_variable(initializer=tf.constant_initializer(value=initial_theta),
+                               shape=[6],
+                               dtype=tf.float32,
+                               regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                               name='bias')
+
+        fcm = tf.matmul(feedback_ins, kernel)
+        loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
+        out_size = (shape[1], shape[2])
+        assert(len(ff_out.shape) == 4) # we can only spatial transform on a convolutional input
+        h_trans = tnn.spatial_transformer.transformer(ff_out, loc_out, out_size)
+        bs = ff_out.get_shape().as_list()[0]
+        cs = ff_out.get_shape().as_list()[-1]
+        h_trans.set_shape([bs, shape[1], shape[2], cs])
+        return h_trans
+
+def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, reuse=None):
+    """
+    Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
+
+    :Args:
+        - inputs
+        - shape
+    """
+    outputs = []
+    if preproc == 'crop':
+        inputs = crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse)
+    elif preproc == 'sp_transform':
+        # skips and feedforward inputs were combined already and then transformed by the feedback
+        output = sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
+        return output
+
+    output = input_aggregator(inputs, spatial_op, channel_op, kernel_init, weight_decay, reuse)
 
     return output
 
