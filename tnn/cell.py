@@ -111,7 +111,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'conv_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, weight_decay=weight_decay)
+                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, weight_decay=weight_decay, activation=None, batch_norm=False)
             else:
                 raise ValueError
             outputs.append(out)
