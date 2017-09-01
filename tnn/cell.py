@@ -140,10 +140,12 @@ def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_
     ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
     if len(feedback_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
         return inputs
-    feedback_ins = tf.concat(feedback_ins, axis=-1, name='comb')
+    not_ff = feedback_ins + skip_ins
+    # combine skips and feedbacks to learn the crop from 
+    not_ff_ins = tf.concat(not_ff, axis=-1, name='comb')
     mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
     with tf.variable_scope(mlp_nm, reuse=reuse):
-        mlp_out = tfutils.model.fc(feedback_ins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
+        mlp_out = tfutils.model.fc(not_ff_ins, 5, kernel_init=kernel_init, activation=None, batch_norm=False)
 
     alpha = tf.slice(mlp_out, [0, 0], [-1, 1])
     alpha = tf.expand_dims(tf.expand_dims(alpha, axis=-1), axis=-1)
@@ -189,7 +191,7 @@ def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_
     new_name = ff_nm + '_mod'
     new_in = tf.add(ff_in, padded_img, name=new_name)
 
-    new_out = [new_in] + skip_ins # skips will be combined after
+    new_out = [new_in]
     return new_out
 
 def tile_func(inp, shape):
