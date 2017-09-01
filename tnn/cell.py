@@ -138,9 +138,9 @@ def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_
     # note: e.g. node_nms = ['split', 'V1', 'V2', 'V4', 'pIT', 'aIT']
 
     ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
-    if len(feedback_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
-        return inputs
     not_ff = feedback_ins + skip_ins
+    if len(not_ff) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+        return inputs
     # combine skips and feedbacks to learn the crop from 
     not_ff_ins = tf.concat(not_ff, axis=-1, name='comb')
     mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
@@ -247,6 +247,7 @@ def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op,
     into that layer'''
     ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
     new_inputs = [ff_in]
+    not_ff = feedback_ins + skip_ins
     #print('New inputs: ', new_inputs)
     # Note you must pass to_exclude to the init_nodes method in main.py if using the concat channel op
     # since the total number of channels excludes the feedback channels as we are not combining them
@@ -254,20 +255,20 @@ def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op,
     if channel_op == 'concat':
         print('Make sure to exclude feedback nodes in the main.init_nodes() method!')
 
-    if len(feedback_ins) == 0 or len(skip_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+    if len(not_ff) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
         out_val = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
         return out_val
 
     # aggregate feedforward input
     ff_out = input_aggregator(new_inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
     #print('ff out: ', ff_out.shape, 'shape: ', shape)
-    not_ff = feedback_ins + skip_ins
     # combine skips and feedbacks to learn the affine transform from 
     not_ff_ins = tf.concat(not_ff, axis=-1, name='comb')
     if dropout is not None:
         not_ff_ins = tf.nn.dropout(not_ff_ins, keep_prob=dropout)
     #print('Feedback_in shape: ', not_ff_ins.shape)
     mlp_nm = 'spatial_transform_for_%s' % ff_inpnm
+    #print('MLP NAME: ', mlp_nm)
     # we use the feedbacks to learn our localizer network
     with tf.variable_scope(mlp_nm, reuse=reuse):
         # might want to use tfutils fc to shorten this
