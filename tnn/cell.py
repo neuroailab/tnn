@@ -240,40 +240,41 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             h_trans.set_shape([bs, shape[1], shape[2], cs])
             return h_trans
 
-def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse):
+def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, dropout, reuse):
     '''Learn an affine transformation on the feedforward inputs (including skips) using the feedbacks
     into that layer'''
     ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
-    new_inputs = [ff_in] + skip_ins
-#    print('New inputs: ', new_inputs)
+    new_inputs = [ff_in]
+    #print('New inputs: ', new_inputs)
     # Note you must pass to_exclude to the init_nodes method in main.py if using the concat channel op
     # since the total number of channels excludes the feedback channels as we are not combining them
     # otherwise it does not need to change since the number of input channels is unchanged
     if channel_op == 'concat':
         print('Make sure to exclude feedback nodes in the main.init_nodes() method!')
 
-    if len(feedback_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+    if len(feedback_ins) == 0 or len(skip_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
         out_val = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
         return out_val
 
-    # combine the skips and the feedforward input
+    # aggregate feedforward input
     ff_out = input_aggregator(new_inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
-#    print('ff out: ', ff_out.shape, 'shape: ', shape)
-    feedback_ins = tf.concat(feedback_ins, axis=-1, name='comb')
-#    print('Feedback_in shape: ', feedback_ins.shape)
+    #print('ff out: ', ff_out.shape, 'shape: ', shape)
+    not_ff = feedback_ins + skip_ins
+    # combine skips and feedbacks to learn the affine transform from 
+    not_ff_ins = tf.concat(not_ff, axis=-1, name='comb')
+    if dropout is not None:
+        not_ff_ins = tf.nn.dropout(not_ff_ins, keep_prob=dropout)
+    #print('Feedback_in shape: ', not_ff_ins.shape)
     mlp_nm = 'spatial_transform_for_%s' % ff_inpnm
     # we use the feedbacks to learn our localizer network
     with tf.variable_scope(mlp_nm, reuse=reuse):
         # might want to use tfutils fc to shorten this
-        in_depth = feedback_ins.get_shape().as_list()[-1]
-        if weight_decay is None:
-            weight_decay = 0.
+        in_depth = not_ff_ins.get_shape().as_list()[-1]
 
         # identity initialization (weights = zeros and biases = identity)
         kernel = tf.get_variable(initializer=tf.zeros_initializer(),
                                shape=[in_depth, 6],
                                dtype=tf.float32,
-                               regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                                name='weights')
 
         initial_theta = np.array([[1., 0, 0], [0, 1., 0]])
@@ -282,10 +283,9 @@ def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op,
         biases = tf.get_variable(initializer=tf.constant_initializer(value=initial_theta),
                                shape=[6],
                                dtype=tf.float32,
-                               regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                                name='bias')
 
-        fcm = tf.matmul(feedback_ins, kernel)
+        fcm = tf.matmul(not_ff_ins, kernel)
         loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
         out_size = (shape[1], shape[2])
         assert(len(ff_out.shape) == 4) # we can only spatial transform on a convolutional input
@@ -295,7 +295,7 @@ def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op,
         h_trans.set_shape([bs, shape[1], shape[2], cs])
         return h_trans
 
-def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, reuse=None):
+def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, dropout=None, reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -307,8 +307,8 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V
         inputs = crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse)
     elif preproc == 'sp_transform':
         # skips and feedforward inputs were combined already and then transformed by the feedback
-        output = sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
-#        print('Preproc output: ', output.shape)
+        output = sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, dropout, reuse)
+        #print('Preproc output: ', output.shape)
         return output
 
     output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
