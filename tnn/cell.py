@@ -270,9 +270,11 @@ def deconv(inp, shape, weight_decay, ff_inpnm, reuse):
                                    regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                                    name='bias')
 
+           stride_0 = shape[1] // inp.get_shape().as_list()[1]
+           stride_1 = shape[2] // inp.get_shape().as_list()[2]
            conv_t = tf.nn.conv2d_transpose(inp, kernel,
                                            output_shape=shape,
-                                           strides=[1, 2, 2, 1],
+                                           strides=[1, stride_0, stride_1, 1],
                                            padding='SAME')
 
            output = tf.nn.bias_add(conv_t, biases, name='deconv_out')
