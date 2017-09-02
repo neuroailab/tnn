@@ -55,7 +55,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
     
     return ff_in, skip_ins, feedback_ins
 
-def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None):
+def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None, ff_inpnm=None):
     '''Helper function that combines the inputs appropriately based on the spatial and channel_ops'''
 
     outputs = []
@@ -208,7 +208,8 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
     '''Learn an affine transformation on the input inp if it is a feedback or skip'''
     pat = re.compile(':|/')
     orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-    if ff_inpnm is not None and ff_inpnm in orig_nm:
+    assert(ff_inpnm is not None)
+    if ff_inpnm in orig_nm:
         return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
     else:
         nm = 'spatial_transform_for_%s' % orig_nm
@@ -247,7 +248,8 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
 def deconv(inp, shape, weight_decay, ff_inpnm, reuse):
     pat = re.compile(':|/')
     orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-    if ff_inpnm is not None and ff_inpnm in orig_nm:
+    assert(ff_inpnm is not None)
+    if ff_inpnm in orig_nm:
         return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
     else:
         nm = 'deconv_for_%s' % orig_nm
@@ -291,11 +293,11 @@ def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op,
         print('Make sure to exclude feedback nodes in the main.init_nodes() method!')
 
     if len(not_ff) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
-        out_val = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
+        out_val = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm)
         return out_val
 
     # aggregate feedforward input
-    ff_out = input_aggregator(new_inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
+    ff_out = input_aggregator(new_inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm)
     #print('ff out: ', ff_out.shape, 'shape: ', shape)
     # combine skips and feedbacks to learn the affine transform from 
     not_ff_ins = tf.concat(not_ff, axis=-1, name='comb')
@@ -349,7 +351,7 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V
         #print('Preproc output: ', output.shape)
         return output
 
-    output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse)
+    output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm)
 
     return output
 
