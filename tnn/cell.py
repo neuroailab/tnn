@@ -256,7 +256,6 @@ def deconv(inp, shape, weight_decay, ff_inpnm, reuse):
                weight_decay = 0.
            in_ch = inp.get_shape().as_list()[-1]
            out_ch = shape[3]
-           out_shp = [inp.get_shape().as_list()[0], shape[1], shape[2], out_ch]
            kernel = tf.get_variable(initializer=tf.contrib.layers.xavier_initializer(),
                                     shape=[3, 3, out_ch, in_ch],
                                     dtype=tf.float32,
@@ -270,7 +269,7 @@ def deconv(inp, shape, weight_decay, ff_inpnm, reuse):
                                    name='bias')
 
            conv_t = tf.nn.conv2d_transpose(inp, kernel,
-                                           output_shape=out_shp,
+                                           output_shape=shape,
                                            strides=[1, 2, 2, 1]
                                            padding='SAME')
 
