@@ -104,6 +104,8 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), inp, dtype=tf.float32)
                 elif spatial_op == 'sp_transform':
                     out = transform_func(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, reuse=reuse)
+                elif spatial_op == 'deconv':
+                    out = deconv(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, reuse=reuse)
                 else:
                     out = tf.image.resize_images(inp, shape[1:3])
 
@@ -241,6 +243,40 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             cs = inp.get_shape().as_list()[-1]
             h_trans.set_shape([bs, shape[1], shape[2], cs])
             return h_trans
+
+def deconv(inp, shape, weight_decay, ff_inpnm, reuse):
+    pat = re.compile(':|/')
+    orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+    if ff_inpnm is not None and ff_inpnm in orig_nm:
+        return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
+    else:
+        nm = 'deconv_for_%s' % orig_nm
+        with tf.variable_scope(nm, reuse=reuse):
+           if weight_decay is None:
+               weight_decay = 0.
+           in_ch = inp.get_shape().as_list()[-1]
+           out_ch = shape[3]
+           out_shp = [inp.get_shape().as_list()[0], shape[1], shape[2], out_ch]
+           kernel = tf.get_variable(initializer=tf.contrib.layers.xavier_initializer(),
+                                    shape=[3, 3, out_ch, in_ch],
+                                    dtype=tf.float32,
+                                    regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                    name='weights')  
+
+           biases = tf.get_variable(initializer=tf.zeros_initializer(),
+                                   shape=[out_ch],
+                                   dtype=tf.float32,
+                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                   name='bias')
+
+           conv_t = tf.nn.conv2d_transpose(inp, kernel,
+                                           output_shape=out_shp,
+                                           strides=[1, 2, 2, 1]
+                                           padding='SAME')
+
+           output = tf.nn.bias_add(conv_t, biases, name='deconv_out')
+
+           return output
 
 def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, dropout, reuse):
     '''Learn an affine transformation on the feedforward inputs (including skips) using the feedbacks
