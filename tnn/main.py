@@ -26,7 +26,10 @@ def _get_func_from_kwargs(function, **kwargs):
             try:
                 f = getattr(tf.nn, function)
             except:
-                f = getattr(tf, function)
+                try:
+                    f = getattr(tf, function)
+                except:
+                    f = getattr(tf.contrib.layers, function)
     return f, kwargs
 
 
@@ -37,20 +40,25 @@ def import_json(json_file_name):
     assert 'nodes' in json_data, 'nodes field not in the json file'
     assert len(json_data['nodes']) > 0, 'no nodes in the json file'
     assert 'edges' in json_data, 'edges field not in the json file'
-    assert len(json_data['edges']) > 0, 'no edges in the json file'
 
     edges = [(str(i['from']), str(i['to'])) for i in json_data['edges']]
     node_names = []
     for node in json_data['nodes']:
         assert 'name' in node
         node_names.append(node['name'])
-    assert set(itertools.chain(*edges)) == set(node_names), 'nodes and edges do not match'
+    if len(edges) != 0:
+        assert set(itertools.chain(*edges)) == set(node_names), 'nodes and edges do not match'
 
     return json_data['nodes'], edges
 
 
 def graph_from_json(json_file_name):
     json_nodes, edges = import_json(json_file_name)
+
+    if len(edges) == 0: # only one node in the graph
+       edges = {}
+       for json_node in json_nodes:
+          edges[json_node['name']] = {}
 
     G = nx.DiGraph(data=edges)
     for json_node in json_nodes:
@@ -97,7 +105,7 @@ def check_inputs(G, input_nodes):
         raise ValueError('Not all valid input nodes have been provided, as the following nodes will not receive any data: {}'.format(missed_nodes))
 
 
-def init_nodes(G, input_nodes, batch_size=256):
+def init_nodes(G, input_nodes, batch_size=256, channel_op='concat'):
     """
     Note: Modifies G in place
     """
@@ -138,27 +146,27 @@ def init_nodes(G, input_nodes, batch_size=256):
         if node not in input_nodes:
             pred_shapes = [G.node[pred]['output_shape'] for pred in G.predecessors(node)]
             attr['kwargs']['harbor_shape'] = harbor_policy(pred_shapes,
-                                                           attr['kwargs']['harbor_shape'])
+                                                           attr['kwargs']['harbor_shape'], channel_op=channel_op)
+
         attr['cell'] = attr['cell'](**attr['kwargs'])
 
-
-def harbor_policy(in_shapes, shape):
+def harbor_policy(in_shapes, shape, channel_op='concat'):
     nchnls = []
     if len(shape) == 4:
         for shp in in_shapes:
             if len(shp) == 4:
-                c  = shp[-1]
+                c = shp[-1]
             elif len(shp) == 2:
-                xs, ys = shape[1: 3]
-                s = shp[1]
-                c = int(math.ceil(s / float(xs * ys)))
+                c = shape[3]
             nchnls.append(c)
     elif len(shape) == 2:
         for shp in in_shapes:
             c = np.prod(shp[1:])
             nchnls.append(c)
-    return shape[:-1] + [sum(nchnls)]
-
+    if channel_op != 'concat':
+        return shape
+    else:
+        return shape[:-1] + [sum(nchnls)]
 
 def unroll(G, input_seq, ntimes=None):
     """
@@ -184,10 +192,13 @@ def unroll(G, input_seq, ntimes=None):
     paths = []
     for inp, out in inp_out:
         paths.extend([p for p in nx.all_simple_paths(G, inp, out)])
-    longest_path_len = max(len(p) for p in paths)
+
+    path_lengths = map(len, paths)
+    longest_path_len = max(path_lengths) if path_lengths else 0
 
     if ntimes is None:
-        ntimes = longest_path_len
+        ntimes = longest_path_len + 1
+        print('Using a default ntimes of: ', ntimes) # useful for logging
 
     for k in input_seq.keys():
         input_val = input_seq[k]
