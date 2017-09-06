@@ -105,7 +105,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                 elif spatial_op == 'sp_transform':
                     out = transform_func(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, reuse=reuse)
                 elif spatial_op == 'deconv':
-                    out = deconv(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, ksize=ksize, activation=activation, reuse=reuse)
+                    out = deconv(inp, shape=shape, weight_decay=weight_decay, ksize=ksize, activation=activation, reuse=reuse)
                 else:
                     out = tf.image.resize_images(inp, shape[1:3])
 
@@ -245,12 +245,9 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             h_trans.set_shape([bs, shape[1], shape[2], cs])
             return h_trans
 
-def deconv(inp, shape, weight_decay, ff_inpnm, ksize, activation, reuse):
-    pat = re.compile(':|/')
-    orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-    assert(ff_inpnm is not None)
-    if ff_inpnm in orig_nm:
-        return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
+def deconv(inp, shape, weight_decay, ksize, activation, reuse):
+    if inp.shape[1] == shape[1] and inp.shape[2] == shape[2] and inp.shape[3] == shape[3]:
+        return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input or inputs of the same shape
     else:
         nm = 'deconv_for_%s' % orig_nm
         with tf.variable_scope(nm, reuse=reuse):
