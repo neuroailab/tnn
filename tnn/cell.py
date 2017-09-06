@@ -55,7 +55,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
     
     return ff_in, skip_ins, feedback_ins
 
-def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None, ff_inpnm=None):
+def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None, ff_inpnm=None, ksize=3, activation=None):
     '''Helper function that combines the inputs appropriately based on the spatial and channel_ops'''
 
     outputs = []
@@ -105,7 +105,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                 elif spatial_op == 'sp_transform':
                     out = transform_func(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, reuse=reuse)
                 elif spatial_op == 'deconv':
-                    out = deconv(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, reuse=reuse)
+                    out = deconv(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, ksize=ksize, activation=activation, reuse=reuse)
                 else:
                     out = tf.image.resize_images(inp, shape[1:3])
 
@@ -245,7 +245,7 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             h_trans.set_shape([bs, shape[1], shape[2], cs])
             return h_trans
 
-def deconv(inp, shape, weight_decay, ff_inpnm, reuse):
+def deconv(inp, shape, weight_decay, ff_inpnm, ksize, activation, reuse):
     pat = re.compile(':|/')
     orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
     assert(ff_inpnm is not None)
@@ -256,10 +256,12 @@ def deconv(inp, shape, weight_decay, ff_inpnm, reuse):
         with tf.variable_scope(nm, reuse=reuse):
            if weight_decay is None:
                weight_decay = 0.
+           if isinstance(ksize, int):
+               ksize = [ksize, ksize]
            in_ch = inp.get_shape().as_list()[-1]
            out_ch = shape[3]
            kernel = tf.get_variable(initializer=tf.contrib.layers.xavier_initializer(),
-                                    shape=[3, 3, out_ch, in_ch],
+                                    shape=[ksize[0], ksize[1], out_ch, in_ch],
                                     dtype=tf.float32,
                                     regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                                     name='weights')  
@@ -278,7 +280,8 @@ def deconv(inp, shape, weight_decay, ff_inpnm, reuse):
                                            padding='SAME')
 
            output = tf.nn.bias_add(conv_t, biases, name='deconv_out')
-
+           if activation is not None:
+               output = getattr(tf.nn, activation)(output, name=activation)
            return output
 
 def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, dropout, reuse):
@@ -337,7 +340,7 @@ def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op,
         h_trans.set_shape([bs, shape[1], shape[2], cs])
         return h_trans
 
-def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, dropout=None, reuse=None):
+def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, dropout=None, ksize=3, activation=None, reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -353,7 +356,7 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V
         #print('Preproc output: ', output.shape)
         return output
 
-    output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm)
+    output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation)
 
     return output
 
