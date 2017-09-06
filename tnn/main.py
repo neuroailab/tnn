@@ -105,7 +105,7 @@ def check_inputs(G, input_nodes):
         raise ValueError('Not all valid input nodes have been provided, as the following nodes will not receive any data: {}'.format(missed_nodes))
 
 
-def init_nodes(G, input_nodes, batch_size=256, channel_op='concat'):
+def init_nodes(G, input_nodes, batch_size=256, channel_op='concat', to_exclude=None):
     """
     Note: Modifies G in place
     """
@@ -144,7 +144,12 @@ def init_nodes(G, input_nodes, batch_size=256, channel_op='concat'):
     # now correct harbor sizes to the final sizes and initialize cells
     for node, attr in G.nodes(data=True):
         if node not in input_nodes:
-            pred_shapes = [G.node[pred]['output_shape'] for pred in G.predecessors(node)]
+            exclude_preds = []
+            if to_exclude is not None and node in to_exclude.keys():
+                exclude_preds = to_exclude[node]
+                if not isinstance(exclude_preds, list):
+                    exclude_preds = [exclude_preds]
+            pred_shapes = [G.node[pred]['output_shape'] for pred in G.predecessors(node) if pred not in exclude_preds]
             attr['kwargs']['harbor_shape'] = harbor_policy(pred_shapes,
                                                            attr['kwargs']['harbor_shape'], channel_op=channel_op)
 

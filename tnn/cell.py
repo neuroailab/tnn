@@ -9,7 +9,7 @@ import math
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.rnn import RNNCell
-
+import tnn.spatial_transformer
 import tfutils.model
 
 def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
@@ -28,7 +28,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
             break
 
     skips = node_nms[:ff_idx] # exclude ff input
-    feedbacks = node_nms[ff_idx+2:] # exclude ff input, note no layer has ff_idx to be the last element
+    feedbacks = node_nms[ff_idx+2:] # exclude ff input and itself, note no layer has ff_idx to be the last element
 
     skip_ins = []
     feedback_ins = []
@@ -55,16 +55,99 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
     
     return ff_in, skip_ins, feedback_ins
 
+def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None, ff_inpnm=None, ksize=3, activation=None):
+    '''Helper function that combines the inputs appropriately based on the spatial and channel_ops'''
+
+    outputs = []
+    for inp in inputs:
+        if len(shape) == 2:
+            pat = re.compile(':|/')
+            if len(inp.shape) == 2:
+                if channel_op != 'concat' and inp.shape[1] != shape[1]:
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+                    nm = 'fc_to_fc_harbor_for_%s' % nm
+                    with tf.variable_scope(nm, reuse=reuse):
+                        inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init, weight_decay=weight_decay)
+
+                outputs.append(inp)
+
+            elif len(inp.shape) == 4:
+                out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
+                if channel_op != 'concat' and out.shape[1] != shape[1]:
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+                    nm = 'conv_to_fc_harbor_for_%s' % nm
+                    with tf.variable_scope(nm, reuse=reuse):
+                        out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init, weight_decay=weight_decay)    
+
+                outputs.append(out)
+            else:
+                raise ValueError
+
+        elif len(shape) == 4:
+            pat = re.compile(':|/')
+            if len(inp.shape) == 2:
+                nchannels = shape[3]
+                if nchannels != inp.shape[1]:
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+                    nm = 'fc_to_conv_harbor_for_%s' % nm
+                    with tf.variable_scope(nm, reuse=reuse):
+                        inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init, weight_decay=weight_decay)
+                 
+                xs, ys = shape[1: 3]
+                inp = tf.tile(inp, [1, xs*ys])
+                out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
+
+            elif len(inp.shape) == 4:
+                if spatial_op == 'tile':
+                    out = tile_func(inp, shape)
+                elif spatial_op == 'pad':
+                    out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), inp, dtype=tf.float32)
+                elif spatial_op == 'sp_transform':
+                    out = transform_func(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, reuse=reuse)
+                elif spatial_op == 'deconv':
+                    out = deconv(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, ksize=ksize, activation=activation, reuse=reuse)
+                else:
+                    out = tf.image.resize_images(inp, shape[1:3])
+
+                if channel_op != 'concat' and out.shape[3] != shape[3]:
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+                    nm = 'conv_to_conv_harbor_for_%s' % nm
+                    with tf.variable_scope(nm, reuse=reuse):
+                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, weight_decay=weight_decay, activation=None, batch_norm=False)
+            else:
+                raise ValueError
+            outputs.append(out)
+
+        else:
+            raise ValueError('harbor cannot process layer of dim {}'.format(len(shape)))
+
+    if channel_op == 'add':
+        output = tf.add_n(outputs, name='harbor')
+    elif channel_op == 'multiply':
+        if len(outputs) == 1:
+            output = outputs[0]
+        else:
+            output = tf.multiply(outputs[0], outputs[1])
+            if len(outputs) > 2:
+                for output_elem in outputs[2:]:
+                    output = tf.multiply(output, output_elem)
+    else:
+        output = tf.concat(outputs, axis=-1, name='harbor')  
+
+    return output
+
 def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse):
     # note: e.g. node_nms = ['split', 'V1', 'V2', 'V4', 'pIT', 'aIT']
 
     ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
-    if len(feedback_ins) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+    not_ff = feedback_ins + skip_ins
+    if len(not_ff) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
         return inputs
-    feedback_ins = tf.concat(feedback_ins, axis=-1, name='comb')
+    # combine skips and feedbacks to learn the crop from 
+    not_ff_ins = tf.concat(not_ff, axis=-1, name='comb')
     mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
     with tf.variable_scope(mlp_nm, reuse=reuse):
-        mlp_out = tfutils.model.fc(feedback_ins, 5, kernel_init=kernel_init, activation=None) # best way to initialize this?
+        mlp_out = tfutils.model.fc(not_ff_ins, 5, kernel_init=kernel_init, activation=None, batch_norm=False)
 
     alpha = tf.slice(mlp_out, [0, 0], [-1, 1])
     alpha = tf.expand_dims(tf.expand_dims(alpha, axis=-1), axis=-1)
@@ -110,7 +193,7 @@ def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_
     new_name = ff_nm + '_mod'
     new_in = tf.add(ff_in, padded_img, name=new_name)
 
-    new_out = [new_in] + skip_ins # skips will be combined after
+    new_out = [new_in]
     return new_out
 
 def tile_func(inp, shape):
@@ -121,7 +204,143 @@ def tile_func(inp, shape):
     tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
     return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
 
-def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, reuse=None):
+def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
+    '''Learn an affine transformation on the input inp if it is a feedback or skip'''
+    pat = re.compile(':|/')
+    orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+    assert(ff_inpnm is not None)
+    if ff_inpnm in orig_nm:
+        return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
+    else:
+        nm = 'spatial_transform_for_%s' % orig_nm
+        with tf.variable_scope(nm, reuse=reuse):
+            resh = tf.reshape(inp, [inp.get_shape().as_list()[0], -1], name='reshape')
+            in_depth = resh.get_shape().as_list()[-1]
+            if weight_decay is None:
+                weight_decay = 0.
+
+            # identity initialization (weights = zeros and biases = identity)
+            kernel = tf.get_variable(initializer=tf.zeros_initializer(),
+                                   shape=[in_depth, 6],
+                                   dtype=tf.float32,
+                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                   name='weights')
+
+            initial_theta = np.array([[1., 0, 0], [0, 1., 0]])
+            initial_theta = initial_theta.astype('float32')
+            initial_theta = initial_theta.flatten()
+            biases = tf.get_variable(initializer=tf.constant_initializer(value=initial_theta),
+                                   shape=[6],
+                                   dtype=tf.float32,
+                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                   name='bias')
+
+            fcm = tf.matmul(resh, kernel)
+            loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
+            out_size = (shape[1], shape[2])
+            assert(len(inp.shape) == 4) # we can only spatial transform on a convolutional input
+            h_trans = tnn.spatial_transformer.transformer(inp, loc_out, out_size)
+            bs = inp.get_shape().as_list()[0]
+            cs = inp.get_shape().as_list()[-1]
+            h_trans.set_shape([bs, shape[1], shape[2], cs])
+            return h_trans
+
+def deconv(inp, shape, weight_decay, ff_inpnm, ksize, activation, reuse):
+    pat = re.compile(':|/')
+    orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+    assert(ff_inpnm is not None)
+    if ff_inpnm in orig_nm:
+        return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input
+    else:
+        nm = 'deconv_for_%s' % orig_nm
+        with tf.variable_scope(nm, reuse=reuse):
+           if weight_decay is None:
+               weight_decay = 0.
+           if isinstance(ksize, int):
+               ksize = [ksize, ksize]
+           in_ch = inp.get_shape().as_list()[-1]
+           out_ch = shape[3]
+           kernel = tf.get_variable(initializer=tf.contrib.layers.xavier_initializer(),
+                                    shape=[ksize[0], ksize[1], out_ch, in_ch],
+                                    dtype=tf.float32,
+                                    regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                    name='weights')  
+
+           biases = tf.get_variable(initializer=tf.zeros_initializer(),
+                                   shape=[out_ch],
+                                   dtype=tf.float32,
+                                   regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                   name='bias')
+
+           stride_0 = shape[1] // inp.get_shape().as_list()[1]
+           stride_1 = shape[2] // inp.get_shape().as_list()[2]
+           conv_t = tf.nn.conv2d_transpose(inp, kernel,
+                                           output_shape=shape,
+                                           strides=[1, stride_0, stride_1, 1],
+                                           padding='SAME')
+
+           output = tf.nn.bias_add(conv_t, biases, name='deconv_out')
+           if activation is not None:
+               output = getattr(tf.nn, activation)(output, name=activation)
+           return output
+
+def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, dropout, reuse):
+    '''Learn an affine transformation on the feedforward inputs (including skips) using the feedbacks
+    into that layer'''
+    ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
+    new_inputs = [ff_in]
+    not_ff = feedback_ins + skip_ins
+    #print('New inputs: ', new_inputs)
+    # Note you must pass to_exclude to the init_nodes method in main.py if using the concat channel op
+    # since the total number of channels excludes the feedback channels as we are not combining them
+    # otherwise it does not need to change since the number of input channels is unchanged
+    if channel_op == 'concat':
+        print('Make sure to exclude feedback nodes in the main.init_nodes() method!')
+
+    if len(not_ff) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+        out_val = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm)
+        return out_val
+
+    # aggregate feedforward input
+    ff_out = input_aggregator(new_inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm)
+    #print('ff out: ', ff_out.shape, 'shape: ', shape)
+    # combine skips and feedbacks to learn the affine transform from 
+    not_ff_ins = tf.concat(not_ff, axis=-1, name='comb')
+    if dropout is not None:
+        not_ff_ins = tf.nn.dropout(not_ff_ins, keep_prob=dropout)
+    #print('Feedback_in shape: ', not_ff_ins.shape)
+    mlp_nm = 'spatial_transform_for_%s' % ff_inpnm
+    #print('MLP NAME: ', mlp_nm)
+    # we use the feedbacks to learn our localizer network
+    with tf.variable_scope(mlp_nm, reuse=reuse):
+        # might want to use tfutils fc to shorten this
+        in_depth = not_ff_ins.get_shape().as_list()[-1]
+
+        # identity initialization (weights = zeros and biases = identity)
+        kernel = tf.get_variable(initializer=tf.zeros_initializer(),
+                               shape=[in_depth, 6],
+                               dtype=tf.float32,
+                               name='weights')
+
+        initial_theta = np.array([[1., 0, 0], [0, 1., 0]])
+        initial_theta = initial_theta.astype('float32')
+        initial_theta = initial_theta.flatten()
+        biases = tf.get_variable(initializer=tf.constant_initializer(value=initial_theta),
+                               shape=[6],
+                               dtype=tf.float32,
+                               name='bias')
+
+        fcm = tf.matmul(not_ff_ins, kernel)
+        loc_out = tf.nn.bias_add(fcm, biases, name='loc_out')
+        out_size = (shape[1], shape[2])
+        assert(len(ff_out.shape) == 4) # we can only spatial transform on a convolutional input
+        h_trans = tnn.spatial_transformer.transformer(ff_out, loc_out, out_size)
+        bs = ff_out.get_shape().as_list()[0]
+        cs = ff_out.get_shape().as_list()[-1]
+        h_trans.set_shape([bs, shape[1], shape[2], cs])
+        return h_trans
+
+def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, dropout=None, ksize=3, activation=None, reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -129,80 +348,15 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=None, l1_inpnm='split', 
         - inputs
         - shape
     """
-    outputs = []
     if preproc == 'crop':
         inputs = crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse)
+    elif preproc == 'sp_transform':
+        # skips and feedforward inputs were combined already and then transformed by the feedback
+        output = sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, dropout, reuse)
+        #print('Preproc output: ', output.shape)
+        return output
 
-    for inp in inputs:
-        if len(shape) == 2:
-            pat = re.compile(':|/')
-            if len(inp.shape) == 2:
-                if channel_op != 'concat' and inp.shape[1] != shape[1]:
-                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_fc_harbor_for_%s' % nm
-                    with tf.variable_scope(nm, reuse=reuse):
-                        inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init, weight_decay=weight_decay)
-
-                outputs.append(inp)
-
-            elif len(inp.shape) == 4:
-                out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
-                if channel_op != 'concat' and out.shape[1] != shape[1]:
-                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'conv_to_fc_harbor_for_%s' % nm
-                    with tf.variable_scope(nm, reuse=reuse):
-                        out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init, weight_decay=weight_decay)    
-
-                outputs.append(out)
-            else:
-                raise ValueError
-
-        elif len(shape) == 4:
-            pat = re.compile(':|/')
-            if len(inp.shape) == 2:
-                nchannels = shape[3]
-                if nchannels != inp.shape[1]:
-                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'fc_to_conv_harbor_for_%s' % nm
-                    with tf.variable_scope(nm, reuse=reuse):
-                        inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init, weight_decay=weight_decay)
-                 
-                xs, ys = shape[1: 3]
-                inp = tf.tile(inp, [1, xs*ys])
-                out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
-
-            elif len(inp.shape) == 4:
-                if spatial_op == 'tile':
-                    out = tile_func(inp, shape)
-                elif spatial_op == 'pad':
-                    out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), inp, dtype=tf.float32)
-                else:
-                    out = tf.image.resize_images(inp, shape[1:3])
-
-                if channel_op != 'concat' and out.shape[3] != shape[3]:
-                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    nm = 'conv_to_conv_harbor_for_%s' % nm
-                    with tf.variable_scope(nm, reuse=reuse):
-                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, weight_decay=weight_decay)
-            else:
-                raise ValueError
-            outputs.append(out)
-
-        else:
-            raise ValueError('harbor cannot process layer of dim {}'.format(len(shape)))
-
-    if channel_op == 'add':
-        output = tf.add_n(outputs, name='harbor')
-    elif channel_op == 'multiply':
-        if len(outputs) == 1:
-            output = outputs[0]
-        else:
-            output = tf.multiply(outputs[0], outputs[1])
-            if len(outputs) > 2:
-                for output_elem in outputs[2:]:
-                    output = tf.multiply(output, output_elem)
-    else:
-        output = tf.concat(outputs, axis=-1, name='harbor')
+    output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation)
 
     return output
 
