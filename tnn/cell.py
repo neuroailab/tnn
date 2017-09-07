@@ -67,7 +67,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'fc_to_fc_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init, weight_decay=weight_decay)
+                        inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init, weight_decay=weight_decay, activation=activation, batch_norm=False)
 
                 outputs.append(inp)
 
@@ -77,7 +77,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'conv_to_fc_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init, weight_decay=weight_decay)    
+                        out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init, weight_decay=weight_decay, activation=activation, batch_norm=False)    
 
                 outputs.append(out)
             else:
@@ -91,11 +91,23 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'fc_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init, weight_decay=weight_decay)
-                 
-                xs, ys = shape[1: 3]
-                inp = tf.tile(inp, [1, xs*ys])
-                out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
+                        inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init, weight_decay=weight_decay, activation=activation, batch_norm=False)
+
+                if spatial_op == 'emphasis':
+                    if activation == 'softmax' and nchannels != inp.shape[1]:
+                        # softmax has already been applied to the fc
+                        # so now we multiply by nchannels to keep mean value as 1
+                        out = tf.multiply(nchannels, inp)
+                    else:
+                        # either we chose a different activation (like relu) and/or
+                        # we did not apply the fc above and directly apply the fc
+                        # to the input
+                        out = inp
+                else:
+                    # we tile and elementwise multiply 
+                    xs, ys = shape[1: 3]
+                    inp = tf.tile(inp, [1, xs*ys])
+                    out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
 
             elif len(inp.shape) == 4:
                 if spatial_op == 'tile':
@@ -113,7 +125,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'conv_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, weight_decay=weight_decay, activation=None, batch_norm=False)
+                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, weight_decay=weight_decay, activation=activation, batch_norm=False)
             else:
                 raise ValueError
             outputs.append(out)
