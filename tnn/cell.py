@@ -94,9 +94,9 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     with tf.variable_scope(nm, reuse=reuse):
                         inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init, weight_decay=weight_decay, activation=activation, batch_norm=False)
 
-                if spatial_op == 'emphasis' and nchannels != old_channels:
+                if spatial_op == 'emphasis':
                     broad = tf.reshape(inp, (inp.shape.as_list()[0], 1, 1, nchannels))
-                    if activation == 'softmax':
+                    if activation == 'softmax' and nchannels != old_channels:
                         # softmax has already been applied to the fc
                         # so now we multiply by nchannels to keep mean value as 1
                         channel_normalizer = tf.cast(nchannels, dtype=tf.float32)
