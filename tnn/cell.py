@@ -95,22 +95,18 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                         inp = tfutils.model.fc(inp, nchannels, kernel_init=kernel_init, weight_decay=weight_decay, activation=activation, batch_norm=False)
 
                 if spatial_op == 'emphasis':
-                    broad = tf.reshape(inp, (inp.shape.as_list()[0], 1, 1, nchannels))
                     if activation == 'softmax' and nchannels != old_channels:
                         # softmax has already been applied to the fc
                         # so now we multiply by nchannels to keep mean value as 1
                         channel_normalizer = tf.cast(nchannels, dtype=tf.float32)
-                        out = tf.multiply(channel_normalizer, broad)
-                    else:
-                        # either we chose a different activation (like relu) and/or
-                        # we did not apply the fc above and directly apply the fc
-                        # to the input
-                        out = broad
-                else:
-                    # we tile and elementwise multiply 
-                    xs, ys = shape[1: 3]
-                    inp = tf.tile(inp, [1, xs*ys])
-                    out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
+                        inp = tf.multiply(channel_normalizer, inp)
+
+                # we may choose a different activation (like relu) and/or
+                # we did not need to learn an fc above so we directly apply the fc
+                # to the conv input, but in all cases we tile
+                xs, ys = shape[1: 3]
+                inp = tf.tile(inp, [1, xs*ys])
+                out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
 
             elif len(inp.shape) == 4:
                 if spatial_op == 'tile':
