@@ -437,9 +437,9 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                             dtype=tf.float32,
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='weights_' + str(w_idx))
+            w_idx += 1
 
        kernel_list.append(kernel)
-       w_idx += 1
 
 
     new_kernel = tf.concat(kernel_list, axis=-2, name='weights')
