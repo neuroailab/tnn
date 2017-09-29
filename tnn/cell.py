@@ -60,6 +60,14 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
 
     outputs = []
     for inp in inputs:
+
+        # if kernel_init == 'average', use a constant kernel initializer with value = 1/num_input_chanels
+        if kernel_init == 'average':
+            kernel_init = 'constant'
+            kernel_init_kwargs = {'value': tf.cast(1./inp.shape[-1], tf.float32)}
+        else:
+            kernel_init_kwargs = None
+        
         if len(shape) == 2:
             pat = re.compile(':|/')
             if len(inp.shape) == 2:
@@ -67,7 +75,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'fc_to_fc_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init, weight_decay=weight_decay, activation=activation, batch_norm=False)
+                        inp = tfutils.model.fc(inp, shape[1], kernel_init=kernel_init, kernel_init_kwaargs=kernel_init_kwargs, weight_decay=weight_decay, activation=activation, batch_norm=False)
 
                 outputs.append(inp)
 
@@ -124,7 +132,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'conv_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, weight_decay=weight_decay, activation=activation, batch_norm=False)
+                        out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, kernel_init_kwargs=kernel_init_kwargs, weight_decay=weight_decay, activation=activation, batch_norm=False)
             else:
                 raise ValueError
             outputs.append(out)
