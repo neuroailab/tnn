@@ -366,9 +366,9 @@ def depth_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op='resiz
         return dict_out
 
     # aggregate non feedforward input (resize and concat by default)
-    non_ff_out = input_aggregator(not_ff, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs)
+    # non_ff_out = input_aggregator(not_ff, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs)
     dict_out['ff'] = ff_in
-    dict_out['non_ff'] = non_ff_out
+    dict_out['non_ff'] = not_ff
     return dict_out
 
 def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', kernel_init_kwargs=None, weight_decay=None, dropout=None, ksize=3, activation=None, reuse=None):
