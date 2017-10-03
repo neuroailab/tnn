@@ -44,8 +44,8 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
             ff_in = inp
         elif nm in feedbacks: # a feedback input
             if len(inp.shape) == 4: # flatten conv inputs to pass through mlp later
-                reshaped_inp = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
-                feedback_ins.append(reshaped_inp)
+#                reshaped_inp = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
+                feedback_ins.append(inp)
             elif len(inp.shape) == 2:
                 feedback_ins.append(inp)
             else:
