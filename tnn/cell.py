@@ -354,6 +354,23 @@ def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op,
         h_trans.set_shape([bs, shape[1], shape[2], cs])
         return h_trans
 
+def depth_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op='resize', channel_op='concat', kernel_init='xavier', weight_decay=None, reuse=None, ksize=3, activation=None, kernel_init_kwargs=None):
+    '''Separates feedback from feedforward inputs and then combines the non feedforward inputs together'''
+    ff_in, skip_ins, feedback_ins = gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms)
+    not_ff = feedback_ins + skip_ins
+    dict_out = {'ff': None, 'non_ff': None}
+
+    if len(not_ff) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
+        out_val = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs)
+        dict_out['ff'] = out_val
+        return dict_out
+
+    # aggregate non feedforward input (resize and concat by default)
+    non_ff_out = input_aggregator(not_ff, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs)
+    dict_out['ff'] = ff_in
+    dict_out['non_ff'] = non_ff_out
+    return dict_out
+
 def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', kernel_init_kwargs=None, weight_decay=None, dropout=None, ksize=3, activation=None, reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
@@ -364,10 +381,12 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V
     """
     if preproc == 'crop':
         inputs = crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_op, reuse)
+    elif preproc == 'depth':
+        output = depth_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ksize, activation, kernel_init_kwargs)
+        return output
     elif preproc == 'sp_transform':
         # skips and feedforward inputs were combined already and then transformed by the feedback
         output = sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, dropout, reuse)
-        #print('Preproc output: ', output.shape)
         return output
 
     output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs)
