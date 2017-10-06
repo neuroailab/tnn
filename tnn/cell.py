@@ -39,11 +39,8 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
             nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
         else:
             nm = l1_inpnm
-#            nm = pat.sub('__', inp.name.split('/')[0].split('_')[0])
-            print('proc name: ', nm)
       
         if ff_inpnm == nm:
-            print('ff_inpnm: ', ff_inpnm, 'nm: ', nm)
             ff_in = inp
         elif nm in feedbacks: # a feedback input
             if len(inp.shape) == 4: # flatten conv inputs to pass through mlp later
