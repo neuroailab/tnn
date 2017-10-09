@@ -267,16 +267,9 @@ def deconv(inp, shape, channel_op, out_depth, ff_inpnm, weight_decay, ksize, act
 
     #if (inp.shape[1] == shape[1] and inp.shape[2] == shape[2] and inp.shape[3] == shape[3]) or orig_nm == 'split':
     if orig_nm == ff_inpnm:
-        print("deconv doing nothing with " + inp.name)
-        print("output shape is " + str(shape))
-        print(inp.name + " has shape " + str(inp.get_shape().as_list()))
         return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input or inputs of the same shape
     else:
         nm = 'deconv_for_%s' % orig_nm
-        print("deconv doing something with " + inp.name)
-        print("output shape is " + str(shape))
-        print(inp.name + " has shape " + str(inp.get_shape().as_list()))
-        print(orig_nm, nm)
         with tf.variable_scope(nm, reuse=reuse):
            if weight_decay is None:
                weight_decay = 0.
@@ -472,7 +465,6 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                             name='weights_basenet')
         else:
             if pass_feedbacks and in_depth == out_depth: # kernel on feedback inputs results in identity transformation
-                print(input_elem.name + " " + str(input_elem.get_shape().as_list()))
                                
                 # construct a kernel with same shape as feedforward kernel that does identity mapping
                 eye = np.reshape(np.eye(out_depth), [1, 1, out_depth, out_depth]) # identity matrix as 4-tensor
@@ -486,9 +478,7 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                 kernel = tf.get_variable(initializer=eye_init,
                                          shape=[ksize[0], ksize[1], in_depth, out_depth],
                                          dtype=tf.float32, name='weights_' + str(w_idx))
-                print("passing feedback " + input_elem.name)
-                #print(kernel.get_shape().as_list())
-                
+                #print("passing feedback " + input_elem.name)
                
             else:
                 kernel = tf.get_variable(initializer=init,
@@ -511,8 +501,6 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='bias')
     # ops
-    print(inp.name + str(inp.get_shape().as_list()))
-    print(new_kernel.get_shape().as_list())
     conv = tf.nn.conv2d(inp, new_kernel,
                         strides=strides,
                         padding=padding)
