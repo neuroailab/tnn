@@ -420,6 +420,7 @@ def component_conv(inp,
          weight_decay=None,
          activation='relu',
          batch_norm=True,
+         pass_feedbacks=False,
          name='component_conv'
          ):
 
@@ -451,12 +452,34 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='weights_basenet')
        else:
-            kernel = tf.get_variable(initializer=init,
+           if pass_feedbacks: # kernel on feedback inputs results in identity transformation
+               in_depth = input_elem.get_shape().as_list()[-1]
+               assert in_depth == out_depth, ("feedback must have same number of channels as output to pass!")
+
+               # now construct a kernel with same shape as feedforward kernel that does identity mapping
+               eye = np.reshape(np.eye(out_depth), [1, 1, out_depth, out_depth]) # identity matrix as 4-tensor
+               eye_kernel = np.zeros([ksize[0], ksize[1], out_depth, out_depth]) 
+               ctr0 = ksize[0] // 2
+               ctr1 = ksize[1] // 2
+               eye_kernel[ctr0, ctr1, :, :] = eye # only central spatial element is identity mapping on channels
+
+               # convert kernel to tf tensor
+               kernel = tf.Variable(initial_value=eye_kernel, dtype=tf.float32, name='weights_' + str(w_idx))
+               print("passing feedback " + input_elem.name)
+               print(kernel.get_shape().as_list())
+               w_idx += 1
+               
+           else:
+               kernel = tf.get_variable(initializer=init,
                             shape=[ksize[0], ksize[1], input_elem.get_shape().as_list()[-1], out_depth],
                             dtype=tf.float32,
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='weights_' + str(w_idx))
-            w_idx += 1
+
+               w_idx += 1
+
+
+
 
        kernel_list.append(kernel)
 
