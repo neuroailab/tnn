@@ -55,7 +55,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
     
     return ff_in, skip_ins, feedback_ins
 
-def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None, ff_inpnm=None, ksize=3, activation=None, kernel_init_kwargs=None):
+def input_aggregator(inputs, shape, spatial_op, channel_op, out_depth, kernel_init='xavier', weight_decay=None, reuse=None, ff_inpnm=None, ksize=3, activation=None, kernel_init_kwargs=None):
     '''Helper function that combines the inputs appropriately based on the spatial and channel_ops'''
 
     outputs = []
@@ -116,7 +116,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                 elif spatial_op == 'sp_transform':
                     out = transform_func(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, reuse=reuse)
                 elif spatial_op == 'deconv':
-                    out = deconv(inp, shape=shape, weight_decay=weight_decay, ksize=ksize, activation=activation, reuse=reuse)
+                    out = deconv(inp, shape=shape, channel_op=channel_op, out_depth=out_depth, ff_inpnm=ff_inpnm, weight_decay=weight_decay, ksize=ksize, activation=activation, reuse=reuse)
                 else:
                     out = tf.image.resize_images(inp, shape[1:3])
 
@@ -256,24 +256,38 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             h_trans.set_shape([bs, shape[1], shape[2], cs])
             return h_trans
 
-def deconv(inp, shape, weight_decay, ksize, activation, reuse):
+def deconv(inp, shape, channel_op, out_depth, ff_inpnm, weight_decay, ksize, activation, reuse):
     pat = re.compile(':|/')
     if len(inp.name.split('/')) == 1:
         orig_nm = pat.sub('__', inp.name.split('/')[-1].split('_')[0])
+    elif pat.sub('__', inp.name.split('/')[-1]).split('_')[0] in ['split', 'zeros']:
+        orig_nm = ff_inpnm
     else:
         orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
 
-    if inp.shape[1] == shape[1] and inp.shape[2] == shape[2] and inp.shape[3] == shape[3]:
+    #if (inp.shape[1] == shape[1] and inp.shape[2] == shape[2] and inp.shape[3] == shape[3]) or orig_nm == 'split':
+    if orig_nm == ff_inpnm:
+        print("deconv doing nothing with " + inp.name)
+        print("output shape is " + str(shape))
+        print(inp.name + " has shape " + str(inp.get_shape().as_list()))
         return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input or inputs of the same shape
     else:
         nm = 'deconv_for_%s' % orig_nm
+        print("deconv doing something with " + inp.name)
+        print("output shape is " + str(shape))
+        print(inp.name + " has shape " + str(inp.get_shape().as_list()))
+        print(orig_nm, nm)
         with tf.variable_scope(nm, reuse=reuse):
            if weight_decay is None:
                weight_decay = 0.
            if isinstance(ksize, int):
                ksize = [ksize, ksize]
            in_ch = inp.get_shape().as_list()[-1]
-           out_ch = shape[3]
+           out_ch = shape[3] if channel_op != 'concat' else out_depth
+           if out_ch is None:
+               print("You didn't specify an out_depth for deconv-concat; using "+str(in_ch)+"with "+nm)
+               out_ch = in_ch
+
            kernel = tf.get_variable(initializer=tf.contrib.layers.xavier_initializer(),
                                     shape=[ksize[0], ksize[1], out_ch, in_ch],
                                     dtype=tf.float32,
@@ -288,8 +302,11 @@ def deconv(inp, shape, weight_decay, ksize, activation, reuse):
 
            stride_0 = shape[1] // inp.get_shape().as_list()[1]
            stride_1 = shape[2] // inp.get_shape().as_list()[2]
+           output_shape = shape
+           output_shape[3] = out_ch # now can be specified in function call in case of concat
+
            conv_t = tf.nn.conv2d_transpose(inp, kernel,
-                                           output_shape=shape,
+                                           output_shape=output_shape,
                                            strides=[1, stride_0, stride_1, 1],
                                            padding='SAME')
 
@@ -371,7 +388,7 @@ def depth_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op='resiz
     dict_out['non_ff'] = not_ff
     return dict_out
 
-def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', kernel_init_kwargs=None, weight_decay=None, dropout=None, ksize=3, activation=None, reuse=None):
+def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', out_depth=None, kernel_init='xavier', kernel_init_kwargs=None, weight_decay=None, dropout=None, ksize=3, activation=None, reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -389,7 +406,7 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V
         output = sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, dropout, reuse)
         return output
 
-    output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs)
+    output = input_aggregator(inputs, shape, spatial_op, channel_op, out_depth, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs)
 
     return output
 
@@ -445,40 +462,45 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
     kernel_list = []
     w_idx = 0
     for input_elem in inputs_list:
-       if input_name is not None and input_name in input_elem.name:
+        in_depth = input_elem.get_shape().as_list()[-1]
+        
+        if input_name is not None and input_name in input_elem.name:
             kernel = tf.get_variable(initializer=init,
-                            shape=[ksize[0], ksize[1], input_elem.get_shape().as_list()[-1], out_depth],
+                            shape=[ksize[0], ksize[1], in_depth, out_depth],
                             dtype=tf.float32,
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='weights_basenet')
-       else:
-           if pass_feedbacks: # kernel on feedback inputs results in identity transformation
-               # construct a kernel with same shape as feedforward kernel that does identity mapping
-               eye = np.reshape(np.eye(out_depth), [1, 1, out_depth, out_depth]) # identity matrix as 4-tensor
-               eye_kernel = np.zeros([ksize[0], ksize[1], out_depth, out_depth]) 
-               ctr0 = ksize[0] // 2
-               ctr1 = ksize[1] // 2
-               eye_kernel[ctr0, ctr1, :, :] = eye # only central spatial element is identity mapping on channels
+        else:
+            if pass_feedbacks and in_depth == out_depth: # kernel on feedback inputs results in identity transformation
+                print(input_elem.name + " " + str(input_elem.get_shape().as_list()))
+                               
+                # construct a kernel with same shape as feedforward kernel that does identity mapping
+                eye = np.reshape(np.eye(out_depth), [1, 1, out_depth, out_depth]) # identity matrix as 4-tensor
+                eye_kernel = np.zeros([ksize[0], ksize[1], out_depth, out_depth]) 
+                ctr0 = ksize[0] // 2
+                ctr1 = ksize[1] // 2
+                eye_kernel[ctr0, ctr1, :, :] = eye # only central spatial element is identity mapping on channels
+                eye_init = tf.constant_initializer(value=eye_kernel)
 
-               # convert kernel to tf tensor
-               kernel = tf.Variable(initial_value=eye_kernel, dtype=tf.float32, name='weights_' + str(w_idx))
-               print("passing feedback " + input_elem.name)
-               #print(kernel.get_shape().as_list())
-               w_idx += 1
+                # convert kernel to tf tensor
+                kernel = tf.get_variable(initializer=eye_init,
+                                         shape=[ksize[0], ksize[1], in_depth, out_depth],
+                                         dtype=tf.float32, name='weights_' + str(w_idx))
+                print("passing feedback " + input_elem.name)
+                #print(kernel.get_shape().as_list())
+                
                
-           else:
-               kernel = tf.get_variable(initializer=init,
-                            shape=[ksize[0], ksize[1], input_elem.get_shape().as_list()[-1], out_depth],
-                            dtype=tf.float32,
-                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
-                            name='weights_' + str(w_idx))
+            else:
+                kernel = tf.get_variable(initializer=init,
+                                         shape=[ksize[0], ksize[1], in_depth, out_depth],
+                                         dtype=tf.float32,
+                                         regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                         name='weights_' + str(w_idx))
 
-               w_idx += 1
-
-
+            w_idx += 1
 
 
-       kernel_list.append(kernel)
+        kernel_list.append(kernel)
 
 
     new_kernel = tf.concat(kernel_list, axis=-2, name='weights')
@@ -489,7 +511,7 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='bias')
     # ops
-    print(inp.get_shape().as_list())
+    print(inp.name + str(inp.get_shape().as_list()))
     print(new_kernel.get_shape().as_list())
     conv = tf.nn.conv2d(inp, new_kernel,
                         strides=strides,
