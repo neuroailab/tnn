@@ -291,7 +291,7 @@ def deconv(inp, shape, weight_decay, ksize, activation, reuse):
            conv_t = tf.nn.conv2d_transpose(inp, kernel,
                                            output_shape=shape,
                                            strides=[1, stride_0, stride_1, 1],
-                                           padding='SAME')
+                                           padding='VALID')
 
            output = tf.nn.bias_add(conv_t, biases, name='deconv_out')
            if activation is not None:
