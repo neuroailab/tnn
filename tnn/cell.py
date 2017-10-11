@@ -371,6 +371,45 @@ def depth_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op='resiz
     dict_out['non_ff'] = not_ff
     return dict_out
 
+def gate_preproc(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs):
+    '''creates a gate for each feedback where there is a term for every feedback based on the pre memory output that the ff input is fed to
+    then multiplies the gate with each feedback'''
+    feedback_inps = []
+    ff_inp = []
+    for inp in inputs:
+        if inp.shape[1] == shape[1] and inp.shape[2] == shape[2] and inp.shape[3] == shape[3]:
+            ff_inp.append(inp) # simply do nothing with feedforward input or inputs of the same shape
+        else:
+            feedback_inps.append(inp)
+
+    out_terms = ff_inp
+    for inp in feedback_inps: # create gates for each feedback 
+        pat = re.compile(':|/')
+        if len(inp.name.split('/')) == 1:
+            orig_nm = pat.sub('__', inp.name.split('/')[-1].split('_')[0])
+        else:
+            orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+
+        nm = 'gate_for_%s' % orig_nm
+        with tf.variable_scope(nm, reuse=reuse):
+            gate_vars = ff_inp
+            for fb in feedback_inps: # create gate variables for each feedback
+                d_out = deconv(fb, shape=shape, weight_decay=weight_decay, ksize=ksize, activation=activation, reuse=reuse)
+                gate_vars.append(d_out)
+            gate_name = 'gate_out_for_%s' % orig_nm
+            linear_comp = tf.add_n(gate_vars, name=gate_name)
+            gate_out = tf.nn.sigmoid(linear_comp)
+
+        # transform each feedback to the right shape, then multiply by the gate
+        transform_nm = 'transform_for_%s' % orig_nm
+        with tf.variable_scope(transform_nm, reuse=reuse):
+            lin_transform_out = deconv(inp, shape=shape, weight_decay=weight_decay, ksize=ksize, activation=activation, reuse=reuse)
+            gate_comb = gate_out * lin_transform_out
+            out_terms.append(gate_comb)
+
+    output = tf.add_n(out_terms, name='transform_out')
+    return output
+
 def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', kernel_init_kwargs=None, weight_decay=None, dropout=None, ksize=3, activation=None, reuse=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
@@ -387,6 +426,9 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V
     elif preproc == 'sp_transform':
         # skips and feedforward inputs were combined already and then transformed by the feedback
         output = sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op, channel_op, kernel_init, weight_decay, dropout, reuse)
+        return output
+    elif preproc == 'gate':
+        output = gate_preproc(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs)
         return output
 
     output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs)
