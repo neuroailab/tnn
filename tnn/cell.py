@@ -115,6 +115,8 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     out = tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), inp, dtype=tf.float32)
                 elif spatial_op == 'sp_transform':
                     out = transform_func(inp, shape=shape, weight_decay=weight_decay, ff_inpnm=ff_inpnm, reuse=reuse)
+                elif spatial_op == 'flatten':
+                    out = tf.reshape(inp, [inp.get_shape().as_list()[0], -1])
                 elif spatial_op == 'deconv':
                     out = deconv(inp, shape=shape, weight_decay=weight_decay, ksize=ksize, activation=activation, padding=padding, reuse=reuse)
                 else:
