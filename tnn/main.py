@@ -216,7 +216,6 @@ def unroll(G, input_seq, ntimes=None):
 
     for t in range(ntimes):  # Loop over time
         for node, attr in G.nodes(data=True):  # Loop over nodes
-            print(node, t)
             if t == 0:
                 inputs = []
                 if node in input_nodes:

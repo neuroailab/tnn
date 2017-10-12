@@ -288,6 +288,10 @@ def deconv(inp, shape, weight_decay, ksize, activation, padding, reuse):
 
            stride_0 = shape[1] // inp.get_shape().as_list()[1]
            stride_1 = shape[2] // inp.get_shape().as_list()[2]
+           if shape[1] > inp.get_shape().as_list()[1] and shape[1] % inp.get_shape().as_list()[1] != 0: # e.g. 7 // 4 = 1, but should be 2, probably so we want to round up in non-divisible cases
+               stride_0 += 1
+           if shape[2] > inp.get_shape().as_list()[2] and shape[2] % inp.get_shape().as_list()[2] != 0: # e.g. 7 // 4 = 1, but should be 2, probably so we want to round up in non-divisible cases
+               stride_1 += 1
            conv_t = tf.nn.conv2d_transpose(inp, kernel,
                                            output_shape=shape,
                                            strides=[1, stride_0, stride_1, 1],
