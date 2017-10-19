@@ -267,7 +267,42 @@ def deconv(inp, shape, weight_decay, ksize, activation, padding, reuse):
 
     if inp.shape[1] == shape[1] and inp.shape[2] == shape[2] and inp.shape[3] == shape[3]:
         return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input or inputs of the same shape
-    else:
+    elif inp.shape[1] > shape[1] or inp.shape[2] > shape[2]: # e.g. if connection is a skip
+        nm = 'deconv_for_%s' % orig_nm
+        with tf.variable_scope(nm, reuse=reuse):
+            if weight_decay is None:
+                weight_decay = 0.0
+            if isinstance(ksize, int):
+                ksize = [ksize, ksize]
+            in_ch = inp.get_shape().as_list()[-1]
+            out_ch = shape[3]
+
+            kernel = tf.get_variable(initializer=tf.contrib.layers.xavier_initializer(),
+                                     shape=[ksize[0], ksize[1], in_ch, out_ch],
+                                     dtype=tf.float32,
+                                     regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                     name='weights')  
+
+            biases = tf.get_variable(initializer=tf.zeros_initializer(),
+                                     shape=[out_ch],
+                                     dtype=tf.float32,
+                                     regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                     name='bias')
+
+            # simply do a size-matching conv op
+            stride_0 = inp.get_shape()[1] // shape[1]
+            stride_1 = inp.get_shape()[2] // shape[2]
+
+            conv = tf.nn.conv2d(inp, kernel,
+                                strides=[1, stride_0, stride_1, 1],
+                                padding=padding)
+
+            output = tf.nn.bias_add(conv, biases, name='deconv_out')
+            if activation is not None:
+                output = getattr(tf.nn, activation)(output, name=activation)
+            return output
+        
+    else: # a feedback that requires transposed convolution
         nm = 'deconv_for_%s' % orig_nm
         with tf.variable_scope(nm, reuse=reuse):
            if weight_decay is None:
