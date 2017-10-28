@@ -91,14 +91,12 @@ def _get_regularizer(reg_scales=None):
     '''
     
     if reg_scales is None:
-        reg_func = tf.contrib.layers.l2_regularizer(scale=0.)
+        return None
     else:
-        scale_l2 = reg_scales.pop('weight_decay', 0.)
-        scale_l1 = reg_scales.pop('l1', 0.)
-        scale_lap = reg_scales.pop('laplacian', 0.)
-        scale_group = reg_scales.pop('group_sparsity', 0.)
-        if len(reg_scales):
-            raise KeyError, "{0} do not have associated regularizers!".format(reg_scales.keys())
+        scale_l2 = reg_scales.get('weight_decay', 0.)
+        scale_l1 = reg_scales.get('l1', 0.)
+        scale_lap = reg_scales.get('laplacian', 0.)
+        scale_group = reg_scales.get('group_sparsity', 0.)
 
         regs = []
         if scale_l2:
@@ -111,7 +109,7 @@ def _get_regularizer(reg_scales=None):
             regs.append(group_sparsity_regularizer(scale_group))
 
         reg_func = tf.contrib.layers.sum_regularizer(regs)
-
+        
     return reg_func
 
 
@@ -694,7 +692,6 @@ def spatial_fc(inp,
     kernel_init_kwargs: kwargs to pass to tfutils.model.initializer, e.g. 'value' for a constant init
     bias: float value for constant bias initializer
     '''
-
     if kernel_init_kwargs is None:
         kernel_init_kwargs = {}
 
@@ -703,13 +700,12 @@ def spatial_fc(inp,
     
     # kernel
     init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
+    reg_func = _get_regularizer(reg_scales)
     kernel = tf.get_variable(initializer=init,
                              shape=[in_shape[0], in_shape[1], in_shape[2], out_depth],
                              dtype=tf.float32,
-                             regularizer=_get_regularizer(reg_scales),
+                             regularizer=reg_func,
                              name='weights')
-
-    print(kernel)
     
     init = tfutils.model.initializer(kind='constant', value=bias)
     biases = tf.get_variable(initializer=init,
@@ -718,6 +714,7 @@ def spatial_fc(inp,
                              regularizer=None,
                              name='bias')
 
+
     
     # ops
     # conv has full connectivity
@@ -725,7 +722,6 @@ def spatial_fc(inp,
                         strides=[1,1,1,1],
                         padding='VALID')
     output = tf.nn.bias_add(conv, biases, name=name)
-    print(output)
     
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
@@ -801,6 +797,7 @@ class GenFuncCell(RNNCell):
                        output = function(output, inputs, **kwargs) # component_conv needs to know the inputs
                     else:
                        output = function(output, **kwargs)
+
                 pre_name_counter += 1
             if state is None:
                 state = self.state_init[0](shape=output.shape,
