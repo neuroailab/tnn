@@ -803,6 +803,7 @@ class GenFuncCell(RNNCell):
                 state = self.state_init[0](shape=output.shape,
                                            dtype=self.dtype,
                                            **self.state_init[1])
+
             state = self.memory[0](output, state, **self.memory[1])
             self.state = tf.identity(state, name='state')
 
