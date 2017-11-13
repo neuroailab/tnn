@@ -731,7 +731,93 @@ def spatial_fc(inp,
 
     return output
 
+def factored_fc(inp,
+                out_depth,
+                spatial_mask_init='xavier',
+                spatial_mask_init_kwargs=None,
+                feature_kernel_init='xavier',
+                feature_kernel_init_kwargs=None,
+                bias=1.0,
+                spatial_reg_scales=None,
+                feature_reg_scales=None
+                activation=None,
+                name='factored_fc'):
 
+    '''
+    Function that fully connects a spatial tensor of rank 4 to a flat tensor of rank 2. 
+    Whereas spatial_fc(inp) performs a conv op with kernel shape [H,W,D,out_depth], 
+    factored_fc(inp) performs a depth-separable conv over the H,W dimensions with a common spatial
+    kernel, then takes inner product over the D dimension with a feature kernel.
+    Regularizations may apply separately to the spatial mask M and the feature weights W.
+    See [citation].
+
+    Args:
+    
+    inp: a rank 4 tensor with shape [Batch, H, W, D]
+    out_depth: number of channels in the downstream fc layer, i.e. num_neurons to fit N
+    ## TODO ##
+    reg_scales: dict with keys {weight_decay, l1, laplacian, group_sparsity} 
+                whose real scalar values multiply the respective regularizers. (weight_decay corresponds to L2.)
+    spatial_mask_init, feature_kernel_init: in ['xavier', 'zeros', 'constant', etc.]
+    spatial_mask_init_kwargs, feature_kernel_init_kwargs: kwargs to pass to tfutils.model.initializer, e.g. 'value' for a constant init
+    bias: float value for constant bias initializer
+    '''    
+    if spatial_mask_init_kwargs is None:
+        spatial_mask_init_kwargs = {}
+    if kernel_init_kwargs is None:
+        feature_kernel_init_kwargs = {}
+
+    # spatial dimensions of input layer, H x W x D
+    in_shape = inp.get_shape().as_list()[1:4]
+
+    # spatial mask conv kernel 
+    init = tfutils.model.initializer(spatial_mask_init, **spatial_mask_init_kwargs)
+    reg_func = _get_regularizer(spatial_reg_scales)
+
+    # kernel for depthwise convolution with channel_multiplier=1
+    spatial_kernel = tf.get_variable(initializer=init,
+                             shape=[in_shape[0], in_shape[1], out_depth, 1],
+                             dtype=tf.float32,
+                             regularizer=reg_func,
+                             name='weights_spatial')
+    
+    # feature kernel
+    init = tfutils.model.initializer(feature_kernel_init, **feature_kernel_init_kwargs)
+    reg_func = _get_regularizer(feature_reg_scales)
+
+    # kernel only operates in D dimension
+    feature_kernel = tf.get_variable(initializer=init,
+                             shape=[in_shape[2], out_depth],
+                             dtype=tf.float32,
+                             regularizer=reg_func,
+                             name='weights_feature')
+    
+    init = tfutils.model.initializer(kind='constant', value=bias)
+    biases = tf.get_variable(initializer=init,
+                             shape=[out_depth],
+                             dtype=tf.float32,
+                             regularizer=None,
+                             name='bias')
+
+
+    
+    # ops
+    # inner product along dimension D
+    inp = tf.matmul(inp, feature_kernel) # inp now B x H x W x N
+
+    # depthwise conv to fully connect all spatial points within a neuron
+    inp = tf.nn.depthwise_conv2d(inp, spatial_kernel,
+                        strides=[1,1,1,1],
+                        padding='VALID')
+
+    # flatten and add biases
+    output = tf.nn.bias_add(tf.squeeze(inp), biases, name=name)
+    
+    if activation is not None:
+        output = getattr(tf.nn, activation)(output, name=activation)
+
+    return output
+    
 class GenFuncCell(RNNCell):
 
     def __init__(self,
