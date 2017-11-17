@@ -37,14 +37,10 @@ def laplacian_regularizer(scale, scope=None):
                                              dtype=weights.dtype.base_dtype,
                                              name='scale')
         
-            # for spatial/feature-factored readout weights, the mask input is shape [H, W, out_channels, 1]
-            if weights.get_shape().as_list()[-1] == 1:
-                weights = tf.tranpsose(weights, perm=(0,1,3,2)) # put in order [H, W, 1, out_channels]
-
             # weights for readout have shape [h, w, d, out_channels]
             weights = tf.transpose(weights, perm=(3,0,1,2)) # out_ch treated as "batch" dimension of a convolution
             ch_in = weights.get_shape().as_list()[-1] 
-            L = tf.constant(value=[[0.5, 1, 0.5], [1, -6, 1], [0.5, 1, 0.5]], dtype=tf.float32) # 2D Laplacian kernel of shape [3,3]
+            L = tf.constant(value=[[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=tf.float32) # 2D Laplacian kernel of shape [3,3]
             L = tf.reshape(L, shape=[3,3,1,1])
             L = tf.zeros(shape=[3,3,ch_in,1], dtype=tf.float32) + L # Broadcast L to ch_in copies of the same kernel
 
@@ -52,8 +48,8 @@ def laplacian_regularizer(scale, scope=None):
             conv = tf.nn.depthwise_conv2d(weights, L, strides=[1,1,1,1], padding='VALID')
 
             # Square and sum across H, W, D of weights; take sqrt; take sum across neurons_to_fit
-            loss = tf.reduce_sum(tf.square(conv))
-            loss = tf.scalar_mul(my_scale, loss)
+            loss = tf.sqrt(tf.reduce_sum(tf.square(conv), axis=(1,2,3)))
+            loss = tf.scalar_mul(my_scale, tf.reduce_sum(loss, axis=0))
             return tf.identity(loss, name=name)
 
     
