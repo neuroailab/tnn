@@ -590,8 +590,8 @@ class GenFuncCell(RNNCell):
         self.input_init = input_init if input_init[1] is not None else (input_init[0], {})
         self.state_init = state_init if state_init[1] is not None else (state_init[0], {})
 
-        self.dtype = dtype
-        self.name = name
+        self.dtype_tmp = dtype
+        self.name_tmp = name
 
         self._reuse = None
 
@@ -616,7 +616,7 @@ class GenFuncCell(RNNCell):
         #     inputs = [None] * len(self.input_shapes)
         # import pdb; pdb.set_trace()
 
-        with tf.variable_scope(self.name, reuse=self._reuse):
+        with tf.variable_scope(self.name_tmp, reuse=self._reuse):
             # inputs_full = []
             # for inp, shape, dtype in zip(inputs, self.input_shapes, self.input_dtypes):
             #     if inp is None:
@@ -626,7 +626,7 @@ class GenFuncCell(RNNCell):
             if inputs is None:
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
-            output = self.harbor[0](inputs, self.harbor_shape, self.name, reuse=self._reuse, **self.harbor[1])
+            output = self.harbor[0](inputs, self.harbor_shape, self.name_tmp, reuse=self._reuse, **self.harbor[1])
 
             pre_name_counter = 0
             for function, kwargs in self.pre_memory:
@@ -638,7 +638,7 @@ class GenFuncCell(RNNCell):
                 pre_name_counter += 1
             if state is None:
                 state = self.state_init[0](shape=output.shape,
-                                           dtype=self.dtype,
+                                           dtype=self.dtype_tmp,
                                            **self.state_init[1])
             state = self.memory[0](output, state, **self.memory[1])
             self.state = tf.identity(state, name='state')
@@ -652,12 +652,12 @@ class GenFuncCell(RNNCell):
                     else:
                        output = function(output, **kwargs)
                 post_name_counter += 1
-            self.output = tf.identity(tf.cast(output, self.dtype), name='output')
+            self.output_tmp = tf.identity(tf.cast(output, self.dtype_tmp), name='output')
             # scope.reuse_variables()
             self._reuse = True
         self.state_shape = self.state.shape
-        self.output_shape = self.output.shape
-        return self.output, self.state
+        self.output_shape_tmp = self.output_tmp.shape
+        return self.output_tmp, self.state
 
     @property
     def state_size(self):
@@ -678,6 +678,6 @@ class GenFuncCell(RNNCell):
         Integer or TensorShape: size of outputs produced by this cell.
         """
         # if self.output is not None:
-        return self.output_shape
+        return self.output_shape_tmp
         # else:
         #     raise ValueError('Output not initialized yet')
