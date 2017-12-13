@@ -6,11 +6,116 @@ from __future__ import absolute_import, division, print_function
 
 import re
 import math
+import numbers
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.rnn import RNNCell
+from tensorflow.python.framework import ops
 import tnn.spatial_transformer
 import tfutils.model
+
+def laplacian_regularizer(scale, scope=None):
+    ''' Compute loss term by filtering a rank-4 tensor with the discrete Laplacian kernel.
+    Takes the root-sum-of-squares across space, then sums across the out-channel dimension.
+    
+    weights: a rank 4 tensor that represents a filter for a spatial input. Shape: [H, W, D, Num_output_channels]
+    scale: a real scalar to multiply the loss'''
+    
+    if isinstance(scale, numbers.Integral):
+        raise ValueError('scale cannot be an integer: %s' % scale)
+    if isinstance(scale, numbers.Real):
+        if scale < 0.:
+          raise ValueError('Setting a scale less than 0 on a regularizer: %g' %
+                       scale)
+        if scale == 0.:
+          return lambda _: None
+    
+    def laplacian_loss(weights, name=None):
+
+        with ops.name_scope(scope, 'laplacian_regularizer', [weights]) as name:
+            my_scale = ops.convert_to_tensor(scale,
+                                             dtype=weights.dtype.base_dtype,
+                                             name='scale')
+        
+            # for spatial/feature-factored readout weights, the mask input is shape [H, W, out_channels, 1]
+            if weights.get_shape().as_list()[-1] == 1:
+                weights = tf.tranpsose(weights, perm=(0,1,3,2)) # put in order [H, W, 1, out_channels]
+
+            # weights for readout have shape [h, w, d, out_channels]
+            weights = tf.transpose(weights, perm=(3,0,1,2)) # out_ch treated as "batch" dimension of a convolution
+            ch_in = weights.get_shape().as_list()[-1] 
+            L = tf.constant(value=[[0.5, 1, 0.5], [1, -6, 1], [0.5, 1, 0.5]], dtype=tf.float32) # 2D Laplacian kernel of shape [3,3]
+            L = tf.reshape(L, shape=[3,3,1,1])
+            L = tf.zeros(shape=[3,3,ch_in,1], dtype=tf.float32) + L # Broadcast L to ch_in copies of the same kernel
+
+            # Now compute loss as L2 on the output of Laplacian filtering
+            conv = tf.nn.depthwise_conv2d(weights, L, strides=[1,1,1,1], padding='VALID')
+
+            # Square and sum across H, W, D of weights; take sqrt; take sum across neurons_to_fit
+            loss = tf.reduce_sum(tf.square(conv))
+            loss = tf.scalar_mul(my_scale, loss)
+            return tf.identity(loss, name=name)
+
+    
+    return laplacian_loss
+
+
+def group_sparsity_regularizer(scale, scope=None):
+    ''' Compute loss term that is L2 over H,W spatial dimensions and L1 over D and out_channels.
+    
+        weights: a rank 4 tensor that represents a filter for a spatial input. Shape: [H, W, D, Num_output_channels]
+        scale: a real scalar to multiply the loss'''
+    
+    if isinstance(scale, numbers.Integral):
+        raise ValueError('scale cannot be an integer: %s' % scale)
+    if isinstance(scale, numbers.Real):
+        if scale < 0.:
+          raise ValueError('Setting a scale less than 0 on a regularizer: %g' %
+                       scale)
+        if scale == 0.:
+          return lambda _: None
+    
+    def group_sparsity_loss(weights, name=None):
+        
+        with ops.name_scope(scope, 'group_sparsity_regularizer', [weights]) as name:
+            my_scale = ops.convert_to_tensor(scale,
+                                             dtype=weights.dtype.base_dtype,
+                                             name='scale')
+            
+            weights = tf.transpose(weights, perm=(3,0,1,2))
+            channelwise_l2 = tf.sqrt(tf.reduce_sum(tf.square(weights), axis=(1,2))) # sum across H, W spatial dimensions
+            loss = tf.scalar_mul(my_scale, tf.reduce_sum(channelwise_l2)) # sum across D and out_channels, i.e. L1 on D
+            return tf.identity(loss, name=name)
+        
+    return group_sparsity_loss
+
+def _get_regularizer(reg_scales=None):
+    '''
+    Helper function to construct a tensorflow regularizer from a dict of scales to apply to each
+    '''
+    
+    if reg_scales is None:
+        return None
+    else:
+        scale_l2 = reg_scales.get('weight_decay', 0.)
+        scale_l1 = reg_scales.get('l1', 0.)
+        scale_lap = reg_scales.get('laplacian', 0.)
+        scale_group = reg_scales.get('group_sparsity', 0.)
+
+        regs = []
+        if scale_l2:
+            regs.append(tf.contrib.layers.l2_regularizer(scale_l2))
+        if scale_l1:
+            regs.append(tf.contrib.layers.l1_regularizer(scale_l1))
+        if scale_lap:
+            regs.append(laplacian_regularizer(scale_lap))
+        if scale_group:
+            regs.append(group_sparsity_regularizer(scale_group))
+
+        reg_func = tf.contrib.layers.sum_regularizer(regs)
+        
+    return reg_func
+
 
 def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
     '''Helper function that returns the skip, feedforward, and feedback inputs'''
@@ -567,6 +672,162 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                             scale=None, variance_epsilon=1e-8, name='batch_norm')
     return output
 
+
+def spatial_fc(inp,
+               out_depth,
+               kernel_init='xavier',
+               kernel_init_kwargs=None,
+               bias=1.0,
+               reg_scales=None,
+               activation=None,
+               name='spatial_fc'
+               ):
+    
+    '''
+    Function that fully connects a spatial tensor of rank 4 to a flat tensor of rank 2. 
+    Whereas fc(inp) will flatten the input and perform an affine transformation, 
+    spatial_fc(inp) performs a conv op with kernel shape [H,W,D,out_depth].
+    This allows for regularization that takes into account the spatial nature of the kernel.
+
+    Args:
+    
+    inp: a rank 4 tensor with shape [Batch, H, W, D]
+    out_depth: number of channels in the downstream fc layer
+    reg_scales: dict with keys {weight_decay, l1, laplacian, group_sparsity} 
+                whose real scalar values multiply the respective regularizers. (weight_decay corresponds to L2.)
+    kernel_init: in ['xavier', 'zeros', 'constant', etc.]
+    kernel_init_kwargs: kwargs to pass to tfutils.model.initializer, e.g. 'value' for a constant init
+    bias: float value for constant bias initializer
+    '''
+    if kernel_init_kwargs is None:
+        kernel_init_kwargs = {}
+
+    # spatial dimensions of input layer
+    in_shape = inp.get_shape().as_list()[1:4]
+    
+    # kernel
+    init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
+    reg_func = _get_regularizer(reg_scales)
+    kernel = tf.get_variable(initializer=init,
+                             shape=[in_shape[0], in_shape[1], in_shape[2], out_depth],
+                             dtype=tf.float32,
+                             regularizer=reg_func,
+                             name='weights')
+    
+    init = tfutils.model.initializer(kind='constant', value=bias)
+    biases = tf.get_variable(initializer=init,
+                             shape=[out_depth],
+                             dtype=tf.float32,
+                             regularizer=None,
+                             name='bias')
+
+
+    
+    # ops
+    # conv has full connectivity
+    conv = tf.nn.conv2d(inp, kernel,
+                        strides=[1,1,1,1],
+                        padding='VALID')
+    output = tf.nn.bias_add(conv, biases, name=name)
+    
+    if activation is not None:
+        output = getattr(tf.nn, activation)(output, name=activation)
+
+    return output
+
+def factored_fc(inp,
+                out_depth,
+                spatial_mask_init='xavier',
+                spatial_mask_init_kwargs=None,
+                feature_kernel_init='xavier',
+                feature_kernel_init_kwargs=None,
+                bias=1.0,
+                spatial_reg_scales=None,
+                feature_reg_scales=None,
+                activation=None,
+                name='factored_fc'):
+
+    '''
+    Function that fully connects a spatial tensor of rank 4 to a flat tensor of rank 2. 
+    Whereas spatial_fc(inp) performs a conv op with kernel shape [H,W,D,out_depth], 
+    factored_fc(inp) performs a depth-separable conv over the H,W dimensions with a common spatial
+    kernel, then takes inner product over the D dimension with a feature kernel.
+    Regularizations may apply separately to the spatial mask M and the feature weights W.
+    See [citation].
+
+    Args:
+    
+    inp: a rank 4 tensor with shape [Batch, H, W, D]
+    out_depth: number of channels in the downstream fc layer, i.e. num_neurons to fit N
+    ## TODO ##
+    reg_scales: dict with keys {weight_decay, l1, laplacian, group_sparsity} 
+                whose real scalar values multiply the respective regularizers. (weight_decay corresponds to L2.)
+    spatial_mask_init, feature_kernel_init: in ['xavier', 'zeros', 'constant', etc.]
+    spatial_mask_init_kwargs, feature_kernel_init_kwargs: kwargs to pass to tfutils.model.initializer, e.g. 'value' for a constant init
+    bias: float value for constant bias initializer
+    '''    
+    if spatial_mask_init_kwargs is None:
+        spatial_mask_init_kwargs = {}
+    if feature_kernel_init_kwargs is None:
+        feature_kernel_init_kwargs = {}
+
+    # spatial dimensions of input layer, H x W x D
+    in_shape = inp.get_shape().as_list()[1:4]
+
+    # spatial mask conv kernel 
+    init = tfutils.model.initializer(spatial_mask_init, **spatial_mask_init_kwargs)
+    reg_func = _get_regularizer(spatial_reg_scales)
+
+    # kernel for depthwise convolution with channel_multiplier=1
+    spatial_kernel = tf.get_variable(initializer=init,
+                             shape=[in_shape[0], in_shape[1], out_depth, 1],
+                             dtype=tf.float32,
+                             regularizer=reg_func,
+                             name='weights_spatial')
+    #print(spatial_kernel.name, spatial_kernel.get_shape().as_list())
+    
+    # feature kernel
+    init = tfutils.model.initializer(feature_kernel_init, **feature_kernel_init_kwargs)
+    reg_func = _get_regularizer(feature_reg_scales)
+
+    # kernel only operates in D dimension
+    feature_kernel = tf.get_variable(initializer=init,
+                             shape=[in_shape[2], out_depth],
+                             dtype=tf.float32,
+                             regularizer=reg_func,
+                             name='weights_feature')
+    #print(feature_kernel.name, feature_kernel.get_shape().as_list())
+    
+    init = tfutils.model.initializer(kind='constant', value=bias)
+    biases = tf.get_variable(initializer=init,
+                             shape=[out_depth],
+                             dtype=tf.float32,
+                             regularizer=None,
+                             name='bias')
+
+
+    
+    # ops
+    # inner product along dimension D
+    #print(inp.name, inp.shape)
+    inp = tf.tensordot(inp, feature_kernel, axes=[[3],[0]]) # inp now B x H x W x N
+
+    # depthwise conv to fully connect all spatial points within a neuron
+    #print(inp,name, inp.shape)
+    inp = tf.nn.depthwise_conv2d(inp, spatial_kernel,
+                        strides=[1,1,1,1],
+                        padding='VALID')
+
+    # flatten and add biases
+    #print(inp.name, inp.shape)
+    output = tf.nn.bias_add(tf.squeeze(inp), biases, name=name)
+    
+    if activation is not None:
+        output = getattr(tf.nn, activation)(output, name=activation)
+
+    #print(output.name, output.shape)
+    return output
+    
 class GenFuncCell(RNNCell):
 
     def __init__(self,
@@ -635,11 +896,13 @@ class GenFuncCell(RNNCell):
                        output = function(output, inputs, **kwargs) # component_conv needs to know the inputs
                     else:
                        output = function(output, **kwargs)
+
                 pre_name_counter += 1
             if state is None:
                 state = self.state_init[0](shape=output.shape,
                                            dtype=self.dtype_tmp,
                                            **self.state_init[1])
+
             state = self.memory[0](output, state, **self.memory[1])
             self.state = tf.identity(state, name='state')
 
