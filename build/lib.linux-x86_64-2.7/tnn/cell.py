@@ -641,24 +641,32 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                             dtype=tf.float32,
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='weights_basenet')
+            const_init = tfutils.model.initializer(kind='constant', value=bias)            
+            biases = tf.get_variable(initializer=const_init,
+                            shape=[out_depth],
+                            dtype=tf.float32,
+                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                            name='bias')
+            
        else:
             kernel = tf.get_variable(initializer=init,
                             shape=[ksize[0], ksize[1], input_elem.get_shape().as_list()[-1], out_depth],
                             dtype=tf.float32,
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='weights_' + str(w_idx))
+            if w_idx == 0:
+                const_init = tfutils.model.initializer(kind='constant', value=bias)
+                biases = tf.get_variable(initializer=const_init,
+                                         shape=[out_depth],
+                                         dtype=tf.float32,
+                                         regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                         name='bias_0')            
             w_idx += 1
 
        kernel_list.append(kernel)
 
-
     new_kernel = tf.concat(kernel_list, axis=-2, name='weights')
-    const_init = tfutils.model.initializer(kind='constant', value=bias)
-    biases = tf.get_variable(initializer=const_init,
-                            shape=[out_depth],
-                            dtype=tf.float32,
-                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
-                            name='bias')
+
     # ops
     conv = tf.nn.conv2d(inp, new_kernel,
                         strides=strides,
