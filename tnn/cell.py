@@ -745,6 +745,7 @@ def factored_fc(inp,
                 spatial_reg_scales=None,
                 feature_reg_scales=None,
                 activation=None,
+                flatten=True,
                 name='factored_fc'):
 
     '''
@@ -820,7 +821,9 @@ def factored_fc(inp,
 
     # flatten and add biases
     #print(inp.name, inp.shape)
-    output = tf.nn.bias_add(tf.squeeze(inp), biases, name=name)
+    if flatten:
+        inp = tf.squeeze(inp)
+    output = tf.nn.bias_add(inp, biases, name=name)
     
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
