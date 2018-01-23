@@ -746,6 +746,8 @@ def factored_fc(inp,
                 feature_reg_scales=None,
                 activation=None,
                 flatten=True,
+                dropout=None,
+                dropout_seed=0,
                 name='factored_fc'):
 
     '''
@@ -809,6 +811,8 @@ def factored_fc(inp,
 
     
     # ops
+    if dropout is not None:
+        inp = tf.nn.dropout(inp, dropout, seed=dropout_seed, name='dropout')
     # inner product along dimension D
     #print(inp.name, inp.shape)
     inp = tf.tensordot(inp, feature_kernel, axes=[[3],[0]]) # inp now B x H x W x N
