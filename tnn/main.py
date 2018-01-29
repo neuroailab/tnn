@@ -242,3 +242,74 @@ def unroll(G, input_seq, ntimes=None):
             output, state = attr['cell'](inputs=inputs, state=state)
             attr['outputs'].append(output)
             attr['states'].append(state)
+
+
+def unroll_tf(G, input_seq, ntimes=None):
+    """
+    Unrolls a TensorFlow graph in time, but differs from the unroll() in that
+    a full feedforward pass occurs at each timestep (as in the default 
+    Tensorflow RNN unroller)
+
+    Given a NetworkX DiGraph, connects states and outputs over time for `ntimes`
+    steps, producing a TensorFlow graph unrolled in time.
+
+    :Args:
+        - G
+            NetworkX DiGraph that stores initialized GenFuncCell in 'cell' nodes
+        - input_seq (dict)
+            A dict of inputs that specifies the input for each input node as its keys
+    :Kwargs:
+        - ntimes (int or None, default: None)
+            The number of time steps
+    """
+    # find the longest path from the inputs to the outputs:
+    input_nodes = input_seq.keys()
+    check_inputs(G, input_nodes)
+    output_nodes = [n for n in G if G.successors(n) is None]
+    inp_out = itertools.product(input_nodes, output_nodes)
+    paths = []
+    for inp, out in inp_out:
+        paths.extend([p for p in nx.all_simple_paths(G, inp, out)])
+
+    path_lengths = map(len, paths)
+    longest_path_len = max(path_lengths) if path_lengths else 0
+
+    if ntimes is None:
+        ntimes = longest_path_len + 1
+        print('Using a default ntimes of: ', ntimes) # useful for logging
+
+    for k in input_seq.keys():
+        input_val = input_seq[k]
+        if not isinstance(input_val, (tuple, list)):
+            input_seq[k] = [input_val] * ntimes
+
+    node_attr = {}
+    for node, attr in G.nodes(data=True):
+        attr['outputs'] = []
+        attr['states'] = []
+        node_attr[node] = attr
+    
+    s = nx.topological_sort(G) # sort nodes in topological order
+    for node in s:  # Loop over nodes in topological order
+        attr = node_attr[node]
+        for t in range(ntimes):  # Loop over time
+            if t == 0:
+                inputs = []
+                if node in input_nodes:
+                    inputs.append(input_seq[node][t])
+                for pred in sorted(G.predecessors(node)):
+                    inputs.append(G.node[pred]['outputs'][t])
+                if all([i is None for i in inputs]):
+                    inputs = None
+                state = None
+            else:
+                inputs = []
+                if node in input_nodes:
+                    inputs.append(input_seq[node][t])
+                for pred in sorted(G.predecessors(node)):
+                    inputs.append(G.node[pred]['outputs'][t])
+                state = attr['states'][t-1]
+
+            output, state = attr['cell'](inputs=inputs, state=state)
+            attr['outputs'].append(output)
+            attr['states'].append(state)
