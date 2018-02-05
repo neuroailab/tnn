@@ -29,7 +29,10 @@ def _get_func_from_kwargs(function, **kwargs):
                 try:
                     f = getattr(tf, function)
                 except:
-                    f = getattr(tf.contrib.layers, function)
+                    try:
+                        f = getattr(tf.contrib.layers, function)
+                    except:
+                        f = getattr(tf.image, function)
     return f, kwargs
 
 
