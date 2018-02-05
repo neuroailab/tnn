@@ -193,7 +193,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
             if len(inp.shape) == 2:
                 nchannels = shape[3]
                 old_channels = inp.shape[1]
-                if nchannels != old_channels:
+                if nchannels != old_channels and channel_op != 'concat':
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'fc_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
@@ -209,9 +209,13 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                 # we may choose a different activation (like relu) and/or
                 # we did not need to learn an fc above so we directly apply the fc
                 # to the conv input, but in all cases we tile
-                xs, ys = shape[1: 3]
-                inp = tf.tile(inp, [1, xs*ys])
-                out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
+                if channel_op == 'concat':
+                    inp = tf.reshape(inp, (inp.shape.as_list()[0], 1, 1, old_channels))
+                    out = tf.image.resize_images(inp, shape[1:3])
+                else:
+                    xs, ys = shape[1: 3]
+                    inp = tf.tile(inp, [1, xs*ys])
+                    out = tf.reshape(inp, (inp.shape.as_list()[0], xs, ys, nchannels))
 
             elif len(inp.shape) == 4:
                 if spatial_op == 'tile':
@@ -685,9 +689,10 @@ def spatial_fc(inp,
                out_depth,
                kernel_init='xavier',
                kernel_init_kwargs=None,
-               bias=1.0,
+               bias=0.0,
                reg_scales=None,
                activation=None,
+               weight_decay=None,
                name='spatial_fc'
                ):
     
@@ -709,6 +714,8 @@ def spatial_fc(inp,
     '''
     if kernel_init_kwargs is None:
         kernel_init_kwargs = {}
+    if weight_decay is None:
+        weight_decay = 0.0
 
     # spatial dimensions of input layer
     in_shape = inp.get_shape().as_list()[1:4]
@@ -719,14 +726,14 @@ def spatial_fc(inp,
     kernel = tf.get_variable(initializer=init,
                              shape=[in_shape[0], in_shape[1], in_shape[2], out_depth],
                              dtype=tf.float32,
-                             regularizer=reg_func,
+                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                              name='weights')
     
     init = tfutils.model.initializer(kind='constant', value=bias)
     biases = tf.get_variable(initializer=init,
                              shape=[out_depth],
                              dtype=tf.float32,
-                             regularizer=None,
+                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                              name='bias')
 
 
@@ -737,7 +744,6 @@ def spatial_fc(inp,
                         strides=[1,1,1,1],
                         padding='VALID')
     output = tf.nn.bias_add(conv, biases, name=name)
-    
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
 
