@@ -254,9 +254,6 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                 for output_elem in outputs[2:]:
                     output = tf.multiply(output, output_elem)
     else:
-        if len(outputs) > 1:
-            print("feedforward input", ff_inpnm)
-            print([out.name for out in outputs])
         output = tf.concat(outputs, axis=-1, name='harbor')  
 
     return output
