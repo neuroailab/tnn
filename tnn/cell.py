@@ -234,7 +234,11 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                         out = tfutils.model.conv(out, out_depth=shape[3], ksize=[1, 1], kernel_init=kernel_init, kernel_init_kwargs=kernel_init_kwargs, weight_decay=weight_decay, activation=activation, batch_norm=False)
             else:
                 raise ValueError
-            outputs.append(out)
+
+            if inp.name == ff_inpnm:
+                outputs.insert(0, out)
+            else:
+                outputs.append(out)
 
         else:
             raise ValueError('harbor cannot process layer of dim {}'.format(len(shape)))
@@ -677,9 +681,10 @@ def spatial_fc(inp,
                out_depth,
                kernel_init='xavier',
                kernel_init_kwargs=None,
-               bias=1.0,
+               bias=0.0,
                reg_scales=None,
                activation=None,
+               flatten=False,
                name='spatial_fc'
                ):
     
@@ -732,6 +737,9 @@ def spatial_fc(inp,
     
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
+    if flatten:
+        output = tf.reshape(output, shape=[output.shape.as_list()[0], -1], name="flatten")
+    print(output.name, output.shape)
 
     return output
 
