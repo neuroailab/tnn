@@ -609,12 +609,18 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
         # need to do a 1x1 conv to fix channels
         initializer = tfutils.model.initializer(kind=kernel_initializer)
         res_to_out_kernel = tf.get_variable("residual_to_out_weights",
-                                            [1, 1, res_input.shape.as_list()[-1], inp.shape.as_list()[-1]],
+                                            [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
                                             dtype=tf.float32,
                                             initializer=initializer)
         return tf.add(inp, tf.nn.conv2d(res_inp, res_to_out_kernel, strides=[1,1,1,1], padding='SAME'))
-    else: # worse shape mismatch
-        raise NotImplementedError("Residual input must have same spatial dimensions as feedforward input")
+    else: # shape mismatch in spatial dimension
+        res_input = tf.image.resize_images(res_inp, inp.shape.as_list()[1,2])
+        initializer = tfutils.model.initializer(kind=kernel_initializer)
+        res_to_out_kernel = tf.get_variable("residual_to_out_weights",
+                                            [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
+                                            dtype=tf.float32,
+                                            initializer=initializer)
+        return tf.add(inp, tf.nn.conv2d(res_inp, res_to_out_kernel, strides=[1,1,1,1], padding='SAME'))        
     
 def component_conv(inp,
          inputs_list,
@@ -926,6 +932,8 @@ class GenFuncCell(RNNCell):
                     if function.__name__ == "component_conv":
                         if kwargs.get('return_input', False):
                             output, res_input = function(output, inputs, **kwargs) # component_conv needs to know the inputs
+                            print(output.name, output.shape)
+                            print(res_input.name, res_input.shape)
                         else:
                             output = function(output, inputs, **kwargs) # component_conv needs to know the inputs                            
                     else:

@@ -602,6 +602,26 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
+def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
+    if inp.shape.as_list() == res_inp.shape.as_list():
+        return tf.add(inp, res_inp, name="residual_sum")
+    elif inp.shape.as_list()[:-1] == res_inp.shape.as_list()[:-1]:
+        # need to do a 1x1 conv to fix channels
+        initializer = tfutils.model.initializer(kind=kernel_initializer)
+        res_to_out_kernel = tf.get_variable("residual_to_out_weights",
+                                            [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
+                                            dtype=tf.float32,
+                                            initializer=initializer)
+        return tf.add(inp, tf.nn.conv2d(res_inp, res_to_out_kernel, strides=[1,1,1,1], padding='SAME'))
+    else: # shape mismatch in spatial dimension
+        res_input = tf.image.resize_images(res_inp, inp.shape.as_list()[1,2])
+        initializer = tfutils.model.initializer(kind=kernel_initializer)
+        res_to_out_kernel = tf.get_variable("residual_to_out_weights",
+                                            [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
+                                            dtype=tf.float32,
+                                            initializer=initializer)
+        return tf.add(inp, tf.nn.conv2d(res_inp, res_to_out_kernel, strides=[1,1,1,1], padding='SAME'))        
+    
 def component_conv(inp,
          inputs_list,
          out_depth,
@@ -615,6 +635,7 @@ def component_conv(inp,
          weight_decay=None,
          activation='relu',
          batch_norm=True,
+         return_input=False,
          name='component_conv'
          ):
 
@@ -674,7 +695,10 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
     if batch_norm:
         output = tf.nn.batch_normalization(output, mean=0, variance=1, offset=None,
                             scale=None, variance_epsilon=1e-8, name='batch_norm')
-    return output
+    if return_input:
+        return output, inp
+    else:
+        return output
 
 
 def spatial_fc(inp,
@@ -901,14 +925,19 @@ class GenFuncCell(RNNCell):
                 
             output = self.harbor[0](inputs, self.harbor_shape, self.name_tmp, reuse=self._reuse, **self.harbor[1])
 
-
+            res_input = None
             pre_name_counter = 0
             for function, kwargs in self.pre_memory:
                 with tf.variable_scope("pre_" + str(pre_name_counter), reuse=self._reuse):
                     if function.__name__ == "component_conv":
-                       output = function(output, inputs, **kwargs) # component_conv needs to know the inputs
+                        if kwargs.get('return_input', False):
+                            output, res_input = function(output, inputs, **kwargs) # component_conv needs to know the inputs
+                            print(output.name, output.shape)
+                            print(res_input.name, res_input.shape)
+                        else:
+                            output = function(output, inputs, **kwargs) # component_conv needs to know the inputs                            
                     else:
-                       output = function(output, **kwargs)
+                        output = function(output, **kwargs)
 
                 pre_name_counter += 1
             if state is None:
@@ -924,9 +953,11 @@ class GenFuncCell(RNNCell):
             for function, kwargs in self.post_memory:
                 with tf.variable_scope("post_" + str(post_name_counter), reuse=self._reuse):
                     if function.__name__ == "component_conv":
-                       output = function(output, inputs, **kwargs)
+                        output = function(output, inputs, **kwargs)
+                    elif function.__name__ == "residual_add":
+                        output = function(output, res_input, **kwargs)
                     else:
-                       output = function(output, **kwargs)
+                        output = function(output, **kwargs)
                 post_name_counter += 1
             self.output_tmp = tf.identity(tf.cast(output, self.dtype_tmp), name='output')
             # scope.reuse_variables()
