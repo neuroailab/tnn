@@ -932,8 +932,6 @@ class GenFuncCell(RNNCell):
                     if function.__name__ == "component_conv":
                         if kwargs.get('return_input', False):
                             output, res_input = function(output, inputs, **kwargs) # component_conv needs to know the inputs
-                            print(output.name, output.shape)
-                            print(res_input.name, res_input.shape)
                         else:
                             output = function(output, inputs, **kwargs) # component_conv needs to know the inputs                            
                     else:
