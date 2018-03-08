@@ -608,7 +608,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
     elif inp.shape.as_list()[:-1] == res_inp.shape.as_list()[:-1]:
         # need to do a 1x1 conv to fix channels
         initializer = tfutils.model.initializer(kind=kernel_initializer)
-        res_to_out_kernel = tf.get_variable("residual_add_weights",
+        res_to_out_kernel = tf.get_variable("residual_to_out_weights",
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
                                             dtype=tf.float32,
                                             initializer=initializer)
@@ -616,7 +616,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
     else: # shape mismatch in spatial dimension
         res_input = tf.image.resize_images(res_inp, inp.shape.as_list()[1,2])
         initializer = tfutils.model.initializer(kind=kernel_initializer)
-        res_to_out_kernel = tf.get_variable("residual_add_weights",
+        res_to_out_kernel = tf.get_variable("residual_to_out_weights",
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
                                             dtype=tf.float32,
                                             initializer=initializer)
