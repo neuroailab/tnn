@@ -348,7 +348,8 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
 
             # assert all nodes are in found ordering
             assert(set(s) == set(node_attr.keys()))
-            print('Cannot topo sort, assuming this ordering: ', s)
+            print('Cannot topologically sort, assuming this ordering: ', s)
+            print('If you do not want this ordering, pass your own ordering via ff_order')
 
     for node in s:  # Loop over nodes in topological order
         attr = node_attr[node]
