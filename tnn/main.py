@@ -312,7 +312,7 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
             # find a longest simple path
             longest_max_p = None
             for p in paths:
-                if len(p) == max_path_len:
+                if len(p) == longest_path_len:
                     longest_max_p = p
                     break
 
