@@ -351,15 +351,27 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
             print('Cannot topologically sort, assuming this ordering: ', s)
             print('If you do not want this ordering, pass your own ordering via ff_order')
 
-    for node in s:  # Loop over nodes in topological order
-        attr = node_attr[node]
-        for t in range(ntimes):  # Loop over time
+    for t in range(ntimes):  # Loop over time
+        for node in s:  # Loop over nodes in topological order
+            attr = node_attr[node]
             if t == 0:
                 inputs = []
                 if node in input_nodes:
                     inputs.append(input_seq[node][t])
                 for pred in sorted(G.predecessors(node)):
-                    inputs.append(G.node[pred]['outputs'][t])
+                    pred_idx = s.index(pred)
+                    curr_idx = s.index(node)
+                    if curr_idx > pred_idx: # pred is feedforward or skip input
+                        _inp = G.node[pred]['outputs'][t]
+                    else: # pred is feedback, so we initialize it to 0
+                        cell = G.node[pred]['cell']
+                        output_shape = G.node[pred]['output_shape']
+                        _inp = cell.input_init[0](shape=output_shape,
+                                                name=pred + '/standin',
+                                                **cell.input_init[1])
+
+                    inputs.append(_inp)
+
                 if all([i is None for i in inputs]):
                     inputs = None
                 state = None
@@ -368,7 +380,13 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
                 if node in input_nodes:
                     inputs.append(input_seq[node][t])
                 for pred in sorted(G.predecessors(node)):
-                    inputs.append(G.node[pred]['outputs'][t])
+                    pred_idx = s.index(pred)
+                    curr_idx = s.index(node)
+                    if curr_idx > pred_idx: # pred is feedforward or skip input
+                        inputs.append(G.node[pred]['outputs'][t])
+                    else: # pred is feedback, so we get its output at t-1
+                        inputs.append(G.node[pred]['outputs'][t-1])
+
                 state = attr['states'][t-1]
 
             output, state = attr['cell'](inputs=inputs, state=state)
