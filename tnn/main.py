@@ -264,9 +264,9 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
         - ff_order (list or None, default: None)
             The default feedforward order of the nodes
             If set to None, the unroller will first try to topologically sort the nodes.
-            However, if there are feedbacks, this will fail, so it will pick the first
-            longest simple path from input to output, and print it. Thus, set ff_order
-            if you have feedbacks and do not want the unroller to pick an arbitrary simple path.
+            However, if there are feedbacks, this will fail, so it will pick the union of
+            simple paths from input to output, and print it. Thus, you can only set ff_order
+            if you have feedbacks and do not want the unroller to pick a path for you.
     """
     # find the longest path from the inputs to the outputs:
     input_nodes = input_seq.keys()
@@ -295,20 +295,19 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
         attr['states'] = []
         node_attr[node] = attr
     
-    if ff_order is not None:
-        assert(isinstance(ff_order, list))
-        # assert all nodes in user defined ordering
-        assert(set(s) == set(node_attr.keys()))
-        s = ff_order
-    else:
-        try:
-            # sort nodes in topological order (very efficient)
-            # will only work for directed graphs (so no feedbacks), otherwise always correct ordering
-            s = nx.topological_sort(G)
-        except:
-            # in the event there are feedbacks
-            # go with the union of the simple paths (not as efficient) between multiple inputs/outputs
 
+    try:
+        # sort nodes in topological order (very efficient)
+        # will only work for directed graphs (so no feedbacks), otherwise always correct ordering
+        s = nx.topological_sort(G)
+    except:
+        # in the event there are feedbacks
+        # go with the union of the simple paths (not as efficient) between multiple inputs/outputs
+
+        if ff_order is not None:
+            assert(isinstance(ff_order, list))
+            s = ff_order
+        else:
             # find a longest simple path
             longest_max_p = None
             for p in paths:
@@ -345,11 +344,11 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
                         if not is_pred and not is_succ:
                             s.insert(0, n)
 
-
-            # assert all nodes are in found ordering
-            assert(set(s) == set(node_attr.keys()))
             print('Cannot topologically sort, assuming this ordering: ', s)
             print('If you do not want this ordering, pass your own ordering via ff_order')
+
+    # assert all nodes in ordering
+    assert(set(s) == set(node_attr.keys()))
 
     for t in range(ntimes):  # Loop over time
         for node in s:  # Loop over nodes in topological order
