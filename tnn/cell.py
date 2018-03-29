@@ -225,7 +225,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                 elif spatial_op == 'deconv':
                     out = deconv(inp, shape=shape, weight_decay=weight_decay, ksize=ksize, activation=activation, padding=padding, reuse=reuse)
                 else:
-                    out = tf.image.resize_images(inp, shape[1:3])
+                    out = tf.image.resize_images(inp, shape[1:3], align_corners=True)
 
                 if channel_op != 'concat' and out.shape[3] != shape[3]:
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
@@ -375,7 +375,7 @@ def deconv(inp, shape, weight_decay, ksize, activation, padding, reuse):
         orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
 
     if inp.shape[1] == shape[1] and inp.shape[2] == shape[2] and inp.shape[3] == shape[3]:
-        return tf.image.resize_images(inp, shape[1:3]) # simply do nothing with feedforward input or inputs of the same shape
+        return tf.image.resize_images(inp, shape[1:3], align_corners=True) # simply do nothing with feedforward input or inputs of the same shape
     elif inp.shape[1] > shape[1] or inp.shape[2] > shape[2]: # e.g. if connection is a skip
         nm = 'deconv_for_%s' % orig_nm
         with tf.variable_scope(nm, reuse=reuse):
@@ -614,7 +614,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
                                             initializer=initializer)
         return tf.add(inp, tf.nn.conv2d(res_inp, res_to_out_kernel, strides=[1,1,1,1], padding='SAME'))
     else: # shape mismatch in spatial dimension
-        res_input = tf.image.resize_images(res_inp, inp.shape.as_list()[1,2])
+        res_input = tf.image.resize_images(res_inp, inp.shape.as_list()[1,2], align_corners=True)
         initializer = tfutils.model.initializer(kind=kernel_initializer)
         res_to_out_kernel = tf.get_variable("residual_add_weights",
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
