@@ -192,7 +192,7 @@ def unroll(G, input_seq, ntimes=None):
     # find the longest path from the inputs to the outputs:
     input_nodes = input_seq.keys()
     check_inputs(G, input_nodes)
-    output_nodes = [n for n in G if G.successors(n) is None]
+    output_nodes = [n for n in G if len(G.successors(n))==0]
     inp_out = itertools.product(input_nodes, output_nodes)
     paths = []
     for inp, out in inp_out:
@@ -244,7 +244,7 @@ def unroll(G, input_seq, ntimes=None):
             attr['states'].append(state)
 
 
-def unroll_tf(G, input_seq, ntimes=None):
+def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
     """
     Unrolls a TensorFlow graph in time, but differs from the unroll() in that
     a full feedforward pass occurs at each timestep (as in the default 
@@ -261,11 +261,17 @@ def unroll_tf(G, input_seq, ntimes=None):
     :Kwargs:
         - ntimes (int or None, default: None)
             The number of time steps
+        - ff_order (list or None, default: None)
+            The default feedforward order of the nodes
+            If set to None, the unroller will first try to topologically sort the nodes.
+            However, if there are feedbacks, this will fail, so it will pick the union of
+            simple paths from input to output, and print it. Thus, you can only set ff_order
+            if you have feedbacks and do not want the unroller to pick a path for you.
     """
     # find the longest path from the inputs to the outputs:
     input_nodes = input_seq.keys()
     check_inputs(G, input_nodes)
-    output_nodes = [n for n in G if G.successors(n) is None]
+    output_nodes = [n for n in G if len(G.successors(n))==0]
     inp_out = itertools.product(input_nodes, output_nodes)
     paths = []
     for inp, out in inp_out:
@@ -289,16 +295,82 @@ def unroll_tf(G, input_seq, ntimes=None):
         attr['states'] = []
         node_attr[node] = attr
     
-    s = nx.topological_sort(G) # sort nodes in topological order
-    for node in s:  # Loop over nodes in topological order
-        attr = node_attr[node]
-        for t in range(ntimes):  # Loop over time
+
+    try:
+        # sort nodes in topological order (very efficient)
+        # will only work for directed graphs (so no feedbacks), otherwise always correct ordering
+        s = nx.topological_sort(G)
+    except:
+        # in the event there are feedbacks
+        # go with the union of the simple paths (not as efficient) between multiple inputs/outputs
+
+        if ff_order is not None:
+            assert(isinstance(ff_order, list))
+            s = ff_order
+        else:
+            # find a longest simple path
+            longest_max_p = None
+            for p in paths:
+                if len(p) == longest_path_len:
+                    longest_max_p = p
+                    break
+
+            s = longest_max_p # likely will contain most of the nodes already
+            for p in paths:
+                for n in p:
+                    if n not in s:
+                        is_pred = False
+                        is_succ = False
+                        for idx, existing_n in enumerate(s):
+                            # find first node that n is a predecessor of 
+                            if n in G.predecessors(existing_n):
+                                s.insert(idx, n)
+                                is_pred = True
+                                break
+                        # if n is not a predecessor of anything currently in s, it is a separate output node
+                        if not is_pred:
+                            # find last node that n is a successor of
+                            successor_idxs = []
+                            for idx, existing_n in enumerate(s):
+                                if n in G.successors(existing_n):
+                                    successor_idxs.append(idx)
+
+                            if len(successor_idxs) > 0:
+                                s.insert(successor_idxs[-1]+1, n)
+                                is_succ = True
+
+                        # n is neither a predecessor or successor
+                        # then n must be the input node of a separate path, insert at the beginning
+                        if not is_pred and not is_succ:
+                            s.insert(0, n)
+
+            print('Cannot topologically sort, assuming this ordering: ', s)
+            print('If you do not want this ordering, pass your own ordering via ff_order')
+
+    # assert all nodes in ordering
+    assert(set(s) == set(node_attr.keys()))
+
+    for t in range(ntimes):  # Loop over time
+        for node in s:  # Loop over nodes in topological order
+            attr = node_attr[node]
             if t == 0:
                 inputs = []
                 if node in input_nodes:
                     inputs.append(input_seq[node][t])
                 for pred in sorted(G.predecessors(node)):
-                    inputs.append(G.node[pred]['outputs'][t])
+                    pred_idx = s.index(pred)
+                    curr_idx = s.index(node)
+                    if curr_idx > pred_idx: # pred is feedforward or skip input
+                        _inp = G.node[pred]['outputs'][t]
+                    else: # pred is feedback, so we initialize it to 0
+                        cell = G.node[pred]['cell']
+                        output_shape = G.node[pred]['output_shape']
+                        _inp = cell.input_init[0](shape=output_shape,
+                                                name=pred + '/standin',
+                                                **cell.input_init[1])
+
+                    inputs.append(_inp)
+
                 if all([i is None for i in inputs]):
                     inputs = None
                 state = None
@@ -307,7 +379,13 @@ def unroll_tf(G, input_seq, ntimes=None):
                 if node in input_nodes:
                     inputs.append(input_seq[node][t])
                 for pred in sorted(G.predecessors(node)):
-                    inputs.append(G.node[pred]['outputs'][t])
+                    pred_idx = s.index(pred)
+                    curr_idx = s.index(node)
+                    if curr_idx > pred_idx: # pred is feedforward or skip input
+                        inputs.append(G.node[pred]['outputs'][t])
+                    else: # pred is feedback, so we get its output at t-1
+                        inputs.append(G.node[pred]['outputs'][t-1])
+
                 state = attr['states'][t-1]
 
             output, state = attr['cell'](inputs=inputs, state=state)
