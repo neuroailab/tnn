@@ -30,7 +30,7 @@ setuptools.setup(
     ],
     packages=['tnn'],
     # packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    install_requires=['numpy', 'networkx', 'tensorflow-gpu>=1.0.0'],
+    install_requires=['numpy', 'networkx'],
     extras_require={
         'test': ['nose'],
     }
