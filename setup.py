@@ -30,7 +30,7 @@ setuptools.setup(
     ],
     packages=['tnn'],
     # packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    install_requires=['numpy', 'networkx'],
+    install_requires=['numpy', 'networkx==1.11'],
     extras_require={
         'test': ['nose'],
     }
