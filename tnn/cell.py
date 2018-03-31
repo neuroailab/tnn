@@ -616,7 +616,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
     else: # shape mismatch in spatial dimension
         print("inp shape in residual add")
         print(inp, inp.shape.as_list())
-        res_input = tf.image.resize_images(res_inp, inp.shape.as_list()[1:3], align_corners=True)
+        res_inp = tf.image.resize_images(res_inp, inp.shape.as_list()[1:3], align_corners=True)
+        print("output res_inp shape", res_inp.shape)
         initializer = tfutils.model.initializer(kind=kernel_initializer)
         res_to_out_kernel = tf.get_variable("residual_add_weights",
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
