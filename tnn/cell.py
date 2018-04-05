@@ -633,7 +633,7 @@ def component_conv(inp,
          strides=[1,1,1,1],
                    data_format='channels_last',
          padding='SAME',
-         kernel_init='zeros',
+         kernel_init='xavier',
          kernel_init_kwargs=None,
          bias=0,
          weight_decay=None,
@@ -717,7 +717,7 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                                fused=True,
                                                gamma_initializer=gamma_init,
                                                name="post_conv_BN")
-        print("applied batch_norm in component_conv with is_training", is_training, "and axis", axis)
+
      
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
@@ -744,8 +744,7 @@ def conv_bn(inp,
             batch_norm=False,
             is_training=False,
             init_zero=None,
-            name='conv'
-):
+            name='conv'):
 
     # assert out_shape is not None
     if weight_decay is None:
@@ -757,13 +756,13 @@ def conv_bn(inp,
     in_depth = inp.get_shape().as_list()[-1]
 
     # weights
-    init = initializer(kernel_init, **kernel_init_kwargs)
+    init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
     kernel = tf.get_variable(initializer=init,
                             shape=[ksize[0], ksize[1], in_depth, out_depth],
                             dtype=tf.float32,
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='weights')
-    init = initializer(kind='constant', value=bias)
+    init = tfutils.model.initializer(kind='constant', value=bias)
     biases = tf.get_variable(initializer=init,
                             shape=[out_depth],
                             dtype=tf.float32,
@@ -797,7 +796,6 @@ def conv_bn(inp,
                                                fused=True,
                                                gamma_initializer=gamma_init,
                                                name="post_conv_BN")
-        print("applied batch_norm in conv_bn with is_training", is_training, "and axis", axis)
     
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
