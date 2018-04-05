@@ -14,6 +14,9 @@ from tensorflow.python.framework import ops
 import tnn.spatial_transformer
 import tfutils.model
 
+BATCH_NORM_DECAY = 0.9
+BATCH_NORM_EPSILON = 1e-5
+
 def laplacian_regularizer(scale, scope=None):
     ''' Compute loss term by filtering a rank-4 tensor with the discrete Laplacian kernel.
     Takes the root-sum-of-squares across space, then sums across the out-channel dimension.
@@ -628,13 +631,16 @@ def component_conv(inp,
          input_name=None,
          ksize=[3,3],
          strides=[1,1,1,1],
+                   data_format='channels_last',
          padding='SAME',
          kernel_init='zeros',
          kernel_init_kwargs=None,
          bias=0,
          weight_decay=None,
-         activation='relu',
-         batch_norm=True,
+         activation=None,
+         batch_norm=False,
+                   is_training=False,
+                   init_zero=None,
          return_input=False,
          name='component_conv'
          ):
@@ -690,17 +696,114 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                         padding=padding)
     output = tf.nn.bias_add(conv, biases, name=name)
 
+    if batch_norm:
+        # if activation is none, should use zeros; else ones
+        if init_zero is None:
+            init_zero = True if activation is None else False
+        if init_zero: 
+            gamma_init = tf.zeros_initializer()
+        else:
+            gamma_init = tf.ones_initializer()
+
+        axis = 1 if data_format == 'channels_first' else 3
+        output = tf.layers.batch_normalization(inputs=output,
+                                               axis=axis,
+                                               momentum=BATCH_NORM_DECAY,
+                                               epsilon=BATCH_NORM_EPSILON,
+                                               center=True,
+                                               scale=True,
+                                               training=is_training,
+                                               trainable=True,
+                                               fused=True,
+                                               gamma_initializer=gamma_init,
+                                               name="post_conv_BN")
+        print("applied batch_norm in component_conv with is_training", is_training, "and axis", axis)
+     
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
-    if batch_norm:
-        output = tf.nn.batch_normalization(output, mean=0, variance=1, offset=None,
-                            scale=None, variance_epsilon=1e-8, name='batch_norm')
+    # if batch_norm:
+    #     output = tf.nn.batch_normalization(output, mean=0, variance=1, offset=None,
+    #                         scale=None, variance_epsilon=1e-8, name='batch_norm')
     if return_input:
         return output, inp
     else:
         return output
 
 
+def conv_bn(inp,
+            out_depth,
+            ksize=[3,3],
+            strides=[1,1,1,1],
+            data_format='channels_last',
+            padding='SAME',
+            kernel_init='xavier',
+            kernel_init_kwargs=None,
+            bias=0,
+            weight_decay=None,
+            activation=None,
+            batch_norm=False,
+            is_training=False,
+            init_zero=None,
+            name='conv'
+):
+
+    # assert out_shape is not None
+    if weight_decay is None:
+        weight_decay = 0.
+    if isinstance(ksize, int):
+        ksize = [ksize, ksize]
+    if kernel_init_kwargs is None:
+        kernel_init_kwargs = {}
+    in_depth = inp.get_shape().as_list()[-1]
+
+    # weights
+    init = initializer(kernel_init, **kernel_init_kwargs)
+    kernel = tf.get_variable(initializer=init,
+                            shape=[ksize[0], ksize[1], in_depth, out_depth],
+                            dtype=tf.float32,
+                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                            name='weights')
+    init = initializer(kind='constant', value=bias)
+    biases = tf.get_variable(initializer=init,
+                            shape=[out_depth],
+                            dtype=tf.float32,
+                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                            name='bias')
+    # ops
+    conv = tf.nn.conv2d(inp, kernel,
+                        strides=strides,
+                        padding=padding)
+    output = tf.nn.bias_add(conv, biases, name=name)
+
+
+    if batch_norm:
+        # if activation is none, should use zeros; else ones
+        if init_zero is None:
+            init_zero = True if activation is None else False
+        if init_zero: 
+            gamma_init = tf.zeros_initializer()
+        else:
+            gamma_init = tf.ones_initializer()
+
+        axis = 1 if data_format == 'channels_first' else 3
+        output = tf.layers.batch_normalization(inputs=output,
+                                               axis=axis,
+                                               momentum=BATCH_NORM_DECAY,
+                                               epsilon=BATCH_NORM_EPSILON,
+                                               center=True,
+                                               scale=True,
+                                               training=is_training,
+                                               trainable=True,
+                                               fused=True,
+                                               gamma_initializer=gamma_init,
+                                               name="post_conv_BN")
+        print("applied batch_norm in conv_bn with is_training", is_training, "and axis", axis)
+    
+    if activation is not None:
+        output = getattr(tf.nn, activation)(output, name=activation)
+
+    return output
+    
 def spatial_fc(inp,
                out_depth,
                kernel_init='xavier',
