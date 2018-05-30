@@ -697,28 +697,29 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
     output = tf.nn.bias_add(conv, biases, name=name)
 
     if batch_norm:
-        # if activation is none, should use zeros; else ones
-        if init_zero is None:
-            init_zero = True if activation is None else False
-        if init_zero: 
-            gamma_init = tf.zeros_initializer()
-        else:
-            gamma_init = tf.ones_initializer()
+        # # if activation is none, should use zeros; else ones
+        # if init_zero is None:
+        #     init_zero = True if activation is None else False
+        # if init_zero: 
+        #     gamma_init = tf.zeros_initializer()
+        # else:
+        #     gamma_init = tf.ones_initializer()
 
-        axis = 1 if data_format == 'channels_first' else 3
-        output = tf.layers.batch_normalization(inputs=output,
-                                               axis=axis,
-                                               momentum=BATCH_NORM_DECAY,
-                                               epsilon=BATCH_NORM_EPSILON,
-                                               center=True,
-                                               scale=True,
-                                               training=is_training,
-                                               trainable=True,
-                                               fused=True,
-                                               gamma_initializer=gamma_init,
-                                               name="post_conv_BN")
+        # axis = 1 if data_format == 'channels_first' else 3
+        # output = tf.layers.batch_normalization(inputs=output,
+        #                                        axis=axis,
+        #                                        momentum=BATCH_NORM_DECAY,
+        #                                        epsilon=BATCH_NORM_EPSILON,
+        #                                        center=True,
+        #                                        scale=True,
+        #                                        training=is_training,
+        #                                        trainable=True,
+        #                                        fused=True,
+        #                                        gamma_initializer=gamma_init,
+        #                                        name="post_conv_BN")
 
-     
+        output = tfutils.model.batchnorm_corr(output, is_training=is_training, decay = 0.999, epsilon = 1e-3)
+
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
     # if batch_norm:
