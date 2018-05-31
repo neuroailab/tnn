@@ -13,6 +13,7 @@ from tensorflow.contrib.rnn import RNNCell
 from tensorflow.python.framework import ops
 import tnn.spatial_transformer
 import tfutils.model
+import copy
 
 def laplacian_regularizer(scale, scope=None):
     ''' Compute loss term by filtering a rank-4 tensor with the discrete Laplacian kernel.
@@ -942,15 +943,24 @@ class GenFuncCell(RNNCell):
                         output = function(output, **kwargs)
 
                 pre_name_counter += 1
-            if state is None:
-                state = self.state_init[0](shape=output.shape,
+
+            no_state = self.memory[1].get('no_state', False)
+            if no_state:
+                if 'no_state' in self.memory[1].keys():
+                    mem_kwargs = copy.deepcopy(self.memory[1])
+                    mem_kwargs.pop('no_state')
+                print('Bypassing state')
+
+                if state is None:
+                    state = self.state_init[0](shape=output.shape,
                                            dtype=self.dtype_tmp,
                                            **self.state_init[1])
 
-            state = self.memory[0](output, state, **self.memory[1])
-            self.state = tf.identity(state, name='state')
+                state = self.memory[0](output, state, **mem_kwargs)
+                self.state = tf.identity(state, name='state')
 
-            output = self.state
+                output = self.state
+
             post_name_counter = 0
             for function, kwargs in self.post_memory:
                 with tf.variable_scope("post_" + str(post_name_counter), reuse=self._reuse):
@@ -964,7 +974,11 @@ class GenFuncCell(RNNCell):
             self.output_tmp = tf.identity(tf.cast(output, self.dtype_tmp), name='output')
             # scope.reuse_variables()
             self._reuse = True
-        self.state_shape = self.state.shape
+        if no_state:
+            self.state_shape = None
+            self.state = None
+        else:
+            self.state_shape = self.state.shape
         self.output_shape_tmp = self.output_tmp.shape
         return self.output_tmp, self.state
 
