@@ -946,10 +946,13 @@ class GenFuncCell(RNNCell):
 
             no_state = self.memory[1].get('no_state', False)
             if no_state:
-                if 'no_state' in self.memory[1].keys():
-                    mem_kwargs = copy.deepcopy(self.memory[1])
-                    mem_kwargs.pop('no_state')
                 print('Bypassing state')
+                self.state_shape = None
+                self.state = None
+            else:
+                mem_kwargs = copy.deepcopy(self.memory[1])
+                if 'no_state' in mem_kwargs.keys():
+                    mem_kwargs.pop('no_state')
 
                 if state is None:
                     state = self.state_init[0](shape=output.shape,
@@ -958,6 +961,8 @@ class GenFuncCell(RNNCell):
 
                 state = self.memory[0](output, state, **mem_kwargs)
                 self.state = tf.identity(state, name='state')
+
+                self.state_shape = self.state.shape
 
                 output = self.state
 
@@ -974,11 +979,6 @@ class GenFuncCell(RNNCell):
             self.output_tmp = tf.identity(tf.cast(output, self.dtype_tmp), name='output')
             # scope.reuse_variables()
             self._reuse = True
-        if no_state:
-            self.state_shape = None
-            self.state = None
-        else:
-            self.state_shape = self.state.shape
         self.output_shape_tmp = self.output_tmp.shape
         return self.output_tmp, self.state
 
