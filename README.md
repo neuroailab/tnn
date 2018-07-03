@@ -22,6 +22,7 @@ Look at `tutorials`.
 - Maryann Rui (Berkeley)
 - Harry Bleyan (MIT)
 - Aran Nayebi (Stanford)
+- Daniel Bear (Stanford)
 
 # License
 
