@@ -13,7 +13,7 @@ pip install -e tnn
 
 # Usage
 
-Look at `tutorials`.
+Look at `tutorials`. `tutorials/alexnet_example.py` demonstrates the basic unrolling API with AlexNet. `tutorials/customcell_example.py` shows how to pass a custom cell to a model, and add edges. `tnn/convrnn.py` contains examples of standard ConvRNN cells in the literature. `tnn/resnetrnn.py` contains the Reciprocal Gated Cell implementation (see https://arxiv.org/abs/1807.00053 for details). 
 
 # Contributors
 

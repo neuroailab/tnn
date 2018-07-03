@@ -1,0 +1,202 @@
+{
+  "nodes": [
+    {
+      "name": "L1",
+      "shape": [
+        28,
+        28,
+        1
+      ],
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor",
+        "preproc": null,
+        "spatial_op": "resize",
+        "channel_op": "add",
+        "kernel_init": "xavier"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 64,
+          "ksize": 3,
+          "strides": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
+          "bias": 0,
+          "weight_decay": null,
+          "activation": null,
+          "batch_norm": false
+        },
+        {
+          "function": "dropout",
+          "keep_prob": 1.0,
+          "seed": 0,
+          "name": "dropoutL1"
+        } 
+      ],
+      "memory": {
+        "function": "memory",
+        "shape": [28, 28],
+        "filter_size": [3, 3],
+        "out_depth": 64
+      },
+      "post_memory": [
+        {
+          "function": "relu"
+        },
+        {
+          "function": "max_pool",
+          "ksize": [
+            1,
+            3,
+            3,
+            1
+          ],
+          "strides": [
+            1,
+            2,
+            2,
+            1
+          ],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "L2",
+      "shape_from": "L1",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor",
+        "preproc": null,
+        "spatial_op": "resize",
+        "channel_op": "add",
+        "kernel_init": "xavier"
+      },
+      "pre_memory": [
+        {
+          "function": "conv",
+          "out_depth": 32,
+          "ksize": 3,
+          "strides": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "padding": "SAME",
+          "kernel_init": "xavier",
+          "kernel_init_kwargs": {
+            "seed": 0
+          },
+          "bias": 0,
+          "weight_decay": null,
+          "activation": null,
+          "batch_norm": false
+        },
+        {
+          "function": "dropout",
+          "keep_prob": 1.0,
+          "seed": 0,
+          "name": "dropoutL2"
+        } 
+      ],
+      "memory": {
+        "function": "memory",
+        "shape": [14, 14],
+        "filter_size": [3, 3],
+        "out_depth": 32
+      },
+      "post_memory": [
+        {
+          "function": "relu"
+        },
+        {
+          "function": "max_pool",
+          "ksize": [
+            1,
+            3,
+            3,
+            1
+          ],
+          "strides": [
+            1,
+            2,
+            2,
+            1
+          ],
+          "padding": "SAME"
+        }
+      ]
+    },
+    {
+      "name": "readout",
+      "shape_from": "L2",
+      "dtype": "float32",
+      "input_init": {
+        "function": "zeros"
+      },
+      "state_init": {
+        "function": "zeros"
+      },
+      "harbor": {
+        "function": "harbor"
+      },
+      "pre_memory": [
+        {
+          "function": "flatten"
+        },
+        {
+          "function": "dropout",
+          "keep_prob": 1.0,
+          "seed": 0,
+          "name": "dropoutfinal"
+        }, 
+        {
+          "function": "fc",
+          "out_depth": 200,
+          "kernel_init": "xavier",
+          "weight_decay": null,
+          "activation": null
+        }
+      ],
+      "memory": {
+        "function": "memory",
+        "memory_decay": 0,
+        "trainable": false
+      },
+      "post_memory": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "L1",
+      "to": "L2"
+    },
+    {
+      "from": "L2",
+      "to": "readout"
+    }
+  ]
+}
