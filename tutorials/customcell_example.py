@@ -65,7 +65,7 @@ mnist = input_data.read_data_sets(DATA_PATH, one_hot=False)
 # create the model
 x = tf.placeholder(tf.float32, [batch_size, 784])
 
-y_ = tf.placeholder(tf.int32, [batch_size]) # predicting 10 outputs
+y_ = tf.placeholder(tf.int64, [batch_size]) # predicting 10 outputs
 
 outputs = model_func(x, ntimes=TOTAL_TIMESTEPS, 
     batch_size=batch_size, edges_arr=[], 
