@@ -23,10 +23,10 @@ def loss(G):
         attr['outputs'].append(loss)
 
 
-G = main.graph_from_json('json/alexnet.json')
-main.init_nodes(G, batch_size=256)
-input_seq = tf.zeros([256,224,224,3])
+G = main.graph_from_json('../json/alexnet.json')
+main.init_nodes(G, input_nodes=['conv1'], batch_size=256)
+input_images = tf.zeros([256,224,224,3])
 # input_dict = {'images': tf.zeros([256,224,224,3]),
 #                 'labels': tf.zeros([256], dtype=tf.int64)}
-main.unroll(G, input_seq=input_seq, ntimes=9)
+main.unroll(G, input_seq={'conv1': input_images}, ntimes=9)
 # loss(G)
