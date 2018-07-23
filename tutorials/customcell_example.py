@@ -21,7 +21,7 @@ TOTAL_TIMESTEPS = NETWORK_DEPTH + NUM_TIMESTEPS
 
 def model_func(input_images, ntimes=TOTAL_TIMESTEPS, 
     batch_size=batch_size, edges_arr=[], 
-    base_name='json/VanillaRNN', 
+    base_name='../json/VanillaRNN', 
     tau=0.0, trainable_flag=False):
 
     with tf.variable_scope("my_model"):
@@ -69,7 +69,7 @@ y_ = tf.placeholder(tf.float32, [batch_size, NUM_NEURONS, NUM_TIMESTEPS]) # pred
 
 outputs = model_func(x, ntimes=TOTAL_TIMESTEPS, 
     batch_size=batch_size, edges_arr=[], 
-    base_name='json/VanillaRNN', tau=0.0, trainable_flag=False)
+    base_name='../json/VanillaRNN', tau=0.0, trainable_flag=False)
 
 # setup the loss (average across time, the l2 loss at each timepoint 
 # between model predictions and neuron responses)
