@@ -175,7 +175,7 @@
         }, 
         {
           "function": "fc",
-          "out_depth": 200,
+          "out_depth": 10,
           "kernel_init": "xavier",
           "weight_decay": null,
           "activation": null

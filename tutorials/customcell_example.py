@@ -9,10 +9,9 @@ in this case a vanilla convRNN implemented from scratch,
 which can serve as a template for more complex custom cells'''
 
 batch_size = 256 # batch size for training
-NUM_NEURONS = 200 # number of neurons we are predicting
 NUM_TIMESTEPS = 4 # number of timesteps we are predicting on
 NETWORK_DEPTH = 3 # number of total layers in our network
-DATA_PATH = '/mnt/fs0/datasets/'
+DATA_PATH = '/mnt/fs0/datasets/' # path where MNIST data will be automatically downloaded to
 
 # we always unroll num_timesteps after the first output of the model
 TOTAL_TIMESTEPS = NETWORK_DEPTH + NUM_TIMESTEPS 
@@ -61,25 +60,22 @@ def model_func(input_images, ntimes=TOTAL_TIMESTEPS,
         return outputs
 
 # get MNIST images
-mnist = input_data.read_data_sets(DATA_PATH, one_hot=True)
+mnist = input_data.read_data_sets(DATA_PATH, one_hot=False)
 
 # create the model
 x = tf.placeholder(tf.float32, [batch_size, 784])
 
-y_ = tf.placeholder(tf.float32, [batch_size, NUM_NEURONS, NUM_TIMESTEPS]) # predicting 168 neurons at 4 timepoints
+y_ = tf.placeholder(tf.int32, [batch_size]) # predicting 10 outputs
 
 outputs = model_func(x, ntimes=TOTAL_TIMESTEPS, 
     batch_size=batch_size, edges_arr=[], 
     base_name='../json/VanillaRNN', tau=0.0, trainable_flag=False)
 
-# setup the loss (average across time, the l2 loss at each timepoint 
-# between model predictions and neuron responses)
+# setup the loss (average across time, the cross entropy loss at each timepoint 
+# between model predictions and labels)
 with tf.name_scope('cumulative_loss'):
-    print(outputs)
-    labels_arr = [tf.squeeze(tf.slice(y_, [0, 0, i], [-1, -1, 1])) \
-                 for i in range(len(outputs))]
     outputs_arr = [tf.squeeze(outputs[i]) for i in range(len(outputs))]
-    cumm_loss = tf.add_n([tf.nn.l2_loss(outputs_arr[i] - labels_arr[i]) \
+    cumm_loss = tf.add_n([tf.losses.sparse_softmax_cross_entropy(logits=outputs_arr[i], labels=y_) \
         for i in range(len(outputs))]) / len(outputs)
 
 # setup the optimizer
@@ -89,10 +85,9 @@ with tf.name_scope('adam_optimizer'):
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
     for i in range(20000):
-        batch = mnist.train.next_batch(batch_size)
-        labels_batch = np.random.randn(batch_size, NUM_NEURONS, NUM_TIMESTEPS) # random noise
+        batch_xs, batch_ys = mnist.train.next_batch(batch_size)
         if i % 100 == 0:
-            train_loss = cumm_loss.eval(feed_dict={x: batch[0], y_: labels_batch})
+            train_loss = cumm_loss.eval(feed_dict={x: batch_xs, y_: batch_ys})
             print('step %d, training loss %g' % (i, train_loss))
-        train_step.run(feed_dict={x: batch[0], y_: labels_batch})
+        train_step.run(feed_dict={x: batch_xs, y_: batch_ys})
 
