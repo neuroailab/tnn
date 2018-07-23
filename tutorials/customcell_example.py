@@ -12,6 +12,7 @@ batch_size = 256 # batch size for training
 NUM_NEURONS = 200 # number of neurons we are predicting
 NUM_TIMESTEPS = 4 # number of timesteps we are predicting on
 NETWORK_DEPTH = 3 # number of total layers in our network
+DATA_PATH = '/mnt/fs0/datasets/'
 
 # we always unroll num_timesteps after the first output of the model
 TOTAL_TIMESTEPS = NETWORK_DEPTH + NUM_TIMESTEPS 
@@ -60,7 +61,7 @@ def model_func(input_images, ntimes=TOTAL_TIMESTEPS,
         return outputs
 
 # get MNIST images
-mnist = input_data.read_data_sets('/mnt/fs0/datasets/', one_hot=True)
+mnist = input_data.read_data_sets(DATA_PATH, one_hot=True)
 
 # create the model
 x = tf.placeholder(tf.float32, [batch_size, 784])
