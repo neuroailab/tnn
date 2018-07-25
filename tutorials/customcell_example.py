@@ -34,7 +34,7 @@ def model_func(input_images, ntimes=TOTAL_TIMESTEPS,
 
         for node, attr in G.nodes(data=True):
             memory_func, memory_param = attr['kwargs']['memory']
-            if 'filter_size' in memory_param:
+            if 'out_depth' in memory_param:
                 # this is where you add your custom cell
                 attr['cell'] = tnn_ConvBasicCell
             else:
