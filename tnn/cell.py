@@ -961,7 +961,7 @@ def factored_fc(inp,
     # flatten and add biases
     #print(inp.name, inp.shape)
     if flatten:
-        inp = tf.squeeze(inp)
+        inp = tf.squeeze(inp, axis=[1, 2]) # do not want to accidentally squeeze N dimension if N = 1, else bias_add will throw error
     output = tf.nn.bias_add(inp, biases, name=name)
     
     if activation is not None:
