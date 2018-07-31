@@ -1,7 +1,8 @@
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 from tnn import main
-from tnn.convrnn import tnn_ConvBasicCell
+from tnn.convrnn import tnn_ConvBasicCell, tnn_ConvLSTMCell
+from tnn.reciprocalgaternn import tnn_ReciprocalGateCell
 import numpy as np
 
 '''This is an example of passing a custom cell to your model,
@@ -14,7 +15,13 @@ NETWORK_DEPTH = 3 # number of total layers in our network
 DATA_PATH = '/mnt/fs0/datasets/' # path where MNIST data will be automatically downloaded to
 
 # we always unroll num_timesteps after the first output of the model
-TOTAL_TIMESTEPS = NETWORK_DEPTH + NUM_TIMESTEPS 
+TOTAL_TIMESTEPS = NETWORK_DEPTH + NUM_TIMESTEPS
+
+# decide on model json and cell type
+MODEL_JSON = '../json/5L_imnet128_lstm345'
+CUSTOM_CELL = tnn_ConvLSTMCell
+INPUT_LAYER = 'conv1'
+READOUT_LAYER = 'imnetds'
 
 # we unroll at least NETWORK_DEPTH times (3 in this case) so that the input can reach the output of the network
 # note tau is the value of the memory decay (by default 0) at the readout layer and trainable_flag is whether the memory decay is trainable, which by default is False
@@ -33,10 +40,10 @@ def model_func(input_images, ntimes=TOTAL_TIMESTEPS,
         G = main.graph_from_json(base_name)
 
         for node, attr in G.nodes(data=True):
-            memory_func, memory_param = attr['kwargs']['memory']
-            if 'out_depth' in memory_param:
+            memory_func, memory_params = attr['kwargs']['memory']
+            if any(p in memory_params for p in ['filter_size', 'gate_filter_size', 'tau_filter_size']):
                 # this is where you add your custom cell
-                attr['cell'] = tnn_ConvBasicCell
+                attr['cell'] = CUSTOM_CELL
             else:
                 # default to not having a memory cell
                 # tau = 0.0, trainable = False
@@ -47,15 +54,15 @@ def model_func(input_images, ntimes=TOTAL_TIMESTEPS,
         G.add_edges_from(edges_arr)
 
         # initialize network to infer the shapes of all the parameters
-        main.init_nodes(G, input_nodes=['L1'], batch_size=batch_size)
+        main.init_nodes(G, input_nodes=[INPUT_LAYER], batch_size=batch_size)
         # unroll the network through time
-        main.unroll(G, input_seq={'L1': input_images}, ntimes=ntimes)
+        main.unroll(G, input_seq={INPUT_LAYER: input_images}, ntimes=ntimes)
 
         outputs = {}
         # start from the final output of the model and 4 timesteps beyond that
         for t in range(ntimes-NUM_TIMESTEPS, ntimes):
             idx = t - (ntimes - NUM_TIMESTEPS) # keys start at timepoint 0
-            outputs[idx] = G.node['readout']['outputs'][t]
+            outputs[idx] = G.node[READOUT_LAYER]['outputs'][t]
 
         return outputs
 
@@ -69,7 +76,7 @@ y_ = tf.placeholder(tf.int64, [batch_size]) # predicting 10 outputs
 
 outputs = model_func(x, ntimes=TOTAL_TIMESTEPS, 
     batch_size=batch_size, edges_arr=[], 
-    base_name='../json/VanillaRNN', tau=0.0, trainable_flag=False)
+    base_name=MODEL_JSON, tau=0.0, trainable_flag=False)
 
 # setup the loss (average across time, the cross entropy loss at each timepoint 
 # between model predictions and labels)
