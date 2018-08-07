@@ -354,6 +354,195 @@ class ConvLSTMCell(ConvRNNCell):
           new_state = tf.concat(axis=3, values=[new_c, new_h])
       return new_h, new_state
 
+class ConvUGRNNCell(ConvRNNCell):
+  """Conv UGRNN recurrent network cell.
+  """
+
+  def __init__(self,
+               shape,
+               filter_size, 
+               out_depth,
+               weight_decay=0.0,
+               forget_bias=1.0,
+               kernel_initializer=None,
+               bias_initializer=None,
+               layer_norm=False,
+               norm_gain=1.0,
+               norm_shift=0.0):
+    """Initialize the Conv UGRNN cell.
+    Args:
+      shape: int tuple thats the height and width of the cell
+      filter_size: int tuple thats the height and width of the filter
+      out_depth: int thats the depth of the cell 
+      forget_bias: float, The bias added to forget gates (see above).
+      state_is_tuple: If True, accepted and returned states are 2-tuples of
+        the `c_state` and `m_state`.  If False, they are concatenated
+        along the column axis.  The latter behavior will soon be deprecated.
+    """
+    self.shape = shape
+    self.filter_size = filter_size
+    self._out_depth = out_depth 
+    self._size = tf.TensorShape([self.shape[0], self.shape[1], self._out_depth])
+    self._kernel_initializer = kernel_initializer
+    self._bias_initializer = bias_initializer
+    self._layer_norm = layer_norm
+    self._forget_bias = forget_bias
+    self._g = norm_gain
+    self._b = norm_shift
+    self._weight_decay = weight_decay
+
+  @property
+  def state_size(self):
+    return self._size
+
+  @property
+  def output_size(self):
+    return self._size
+
+  def zero_state(self, batch_size, dtype):
+    """Return zero-filled state tensor(s).
+    Args:
+      batch_size: int, float, or unit Tensor representing the batch size.
+      dtype: the data type to use for the state.
+    Returns:
+      tensor of shape '[batch_size x shape[0] x shape[1] x out_depth]
+      filled with zeros
+    """
+    shape = self.shape
+    out_depth = self._out_depth
+    zeros = tf.zeros([batch_size, shape[0], shape[1], out_depth], dtype=dtype)
+    return zeros
+
+  def _norm(self, inp, scope):
+      shape = inp.get_shape()[-1:]
+      gamma_init = tf.constant_initializer(self._g)
+      beta_init = tf.constant_initializer(self._b)
+      with tf.variable_scope(scope):
+          gamma = tf.get_variable(shape=shape, initializer=gamma_init, name="gamma")
+          beta = tf.get_variable(shape=shape, initializer=beta_init, name="beta")
+
+      normalized = tf.contrib.layers.layer_norm(inp, reuse=True, scope=scope)
+      return normalized
+
+  def __call__(self, inputs, state):
+    """UGRNN cell."""
+    with tf.variable_scope(type(self).__name__):  # "ConvUGRNNCell"
+      # Parameters of gates are concatenated into one multiply for efficiency
+      concat = _conv_linear([inputs, state], \
+              self.filter_size, 2*self._out_depth, True, self._bias_initializer, self._kernel_initializer, bias_regularizer=self._weight_decay, kernel_regularizer=self._weight_decay)
+      
+      g_act, c_act = tf.split(axis=3, num_or_size_splits=2, value=concat)
+
+      if self._layer_norm:
+          g_act = self._norm(g_act, "g_act")
+          c_act = self._norm(h_act, "c_act")
+
+      c = tf.nn.tanh(c_act)
+      g = tf.nn.sigmoid(g_act + self._forget_bias)
+      new_state = g * state + (1.0 - g) * c
+      new_output = new_state
+
+      return new_output, new_state
+
+class ConvIntersectionRNNCell(ConvRNNCell):
+  """Conv IntersectionRNN recurrent network cell.
+  """
+
+  def __init__(self,
+               shape,
+               filter_size, 
+               out_depth,
+               weight_decay=0.0,
+               forget_bias=1.0,
+               kernel_initializer=None,
+               bias_initializer=None,
+               layer_norm=False,
+               norm_gain=1.0,
+               norm_shift=0.0):
+    """Initialize the Conv IntersectionRNN cell.
+    Args:
+      shape: int tuple thats the height and width of the cell
+      filter_size: int tuple thats the height and width of the filter
+      out_depth: int thats the depth of the cell 
+      forget_bias: float, The bias added to forget gates (see above).
+      state_is_tuple: If True, accepted and returned states are 2-tuples of
+        the `c_state` and `m_state`.  If False, they are concatenated
+        along the column axis.  The latter behavior will soon be deprecated.
+    """
+    self.shape = shape
+    self.filter_size = filter_size
+    self._out_depth = out_depth 
+    self._size = tf.TensorShape([self.shape[0], self.shape[1], self._out_depth])
+    self._kernel_initializer = kernel_initializer
+    self._bias_initializer = bias_initializer
+    self._layer_norm = layer_norm
+    self._forget_bias = forget_bias
+    self._g = norm_gain
+    self._b = norm_shift
+    self._weight_decay = weight_decay
+
+  @property
+  def state_size(self):
+    return self._size
+
+  @property
+  def output_size(self):
+    return self._size
+
+  def zero_state(self, batch_size, dtype):
+    """Return zero-filled state tensor(s).
+    Args:
+      batch_size: int, float, or unit Tensor representing the batch size.
+      dtype: the data type to use for the state.
+    Returns:
+      tensor of shape '[batch_size x shape[0] x shape[1] x out_depth]
+      filled with zeros
+    """
+    shape = self.shape
+    out_depth = self._out_depth
+    zeros = tf.zeros([batch_size, shape[0], shape[1], out_depth], dtype=dtype)
+    return zeros
+
+  def _norm(self, inp, scope):
+      shape = inp.get_shape()[-1:]
+      gamma_init = tf.constant_initializer(self._g)
+      beta_init = tf.constant_initializer(self._b)
+      with tf.variable_scope(scope):
+          gamma = tf.get_variable(shape=shape, initializer=gamma_init, name="gamma")
+          beta = tf.get_variable(shape=shape, initializer=beta_init, name="beta")
+
+      normalized = tf.contrib.layers.layer_norm(inp, reuse=True, scope=scope)
+      return normalized
+
+  def __call__(self, inputs, state):
+    """IntersectionRNN cell."""
+    with tf.variable_scope(type(self).__name__):  # "ConvIntersectionRNNCell"
+      # Parameters of gates are concatenated into one multiply for efficiency
+      if inputs.get_shape().as_list()[1] != self.shape[0] or inputs.get_shape().as_list()[2] != self.shape[1] or inputs.get_shape().as_list()[3] != self._out_depth:
+          raise ValueError("Input and output shape must match.")
+
+      n_dim = i_dim = self._out_depth
+      concat = _conv_linear([inputs, state], \
+              self.filter_size, 2*n_dim + 2*i_dim, True, self._bias_initializer, self._kernel_initializer, bias_regularizer=self._weight_decay, kernel_regularizer=self._weight_decay)
+      
+      gh_act, h_act, gy_act, y_act = tf.split(axis=3, num_or_size_splits=[n_dim, n_dim, i_dim, i_dim], value=concat)
+
+      if self._layer_norm:
+          gh_act = self._norm(gh_act, "gh_act")
+          h_act = self._norm(h_act, "h_act")
+          gy_act = self._norm(gy_act, "gy_act")
+          y_act = self._norm(y_act, "y_act")
+
+      h = tf.nn.tanh(h_act)
+      y = tf.nn.relu(y_act)
+      gh = tf.nn.sigmoid(gh_act + self._forget_bias)
+      gy = tf.nn.sigmoid(gy_act + self._forget_bias)
+
+      new_state = gh * state + (1.0 - gh) * h # passed through time
+      new_y = gy * inputs + (1.0 - gy) * y # passed through depth
+
+      return new_y, new_state
+
 class tnn_ConvBasicCell(ConvRNNCell):
 
     def __init__(self,
@@ -767,6 +956,212 @@ class tnn_ConvLSTMCell(ConvRNNCell):
         # else:
         #     raise ValueError('Output not initialized yet')
 
+class tnn_ConvUGRNNCell(ConvRNNCell):
+
+    def __init__(self,
+                 harbor_shape,
+                 harbor=(harbor, None),
+                 pre_memory=None,
+                 memory=(memory, None),
+                 post_memory=None,
+                 input_init=(tf.zeros, None),
+                 state_init=(tf.zeros, None),
+                 dtype=tf.float32,
+                 name=None
+                 ):
+
+        self.harbor_shape = harbor_shape
+        self.harbor = harbor if harbor[1] is not None else (harbor[0], {})
+        self.pre_memory = pre_memory
+        self.memory = memory if memory[1] is not None else (memory[0], {})
+        self.post_memory = post_memory
+
+        self.input_init = input_init if input_init[1] is not None else (input_init[0], {})
+        self.state_init = state_init if state_init[1] is not None else (state_init[0], {})
+
+        self.dtype_tmp = dtype
+        self.name_tmp = name
+
+        self._reuse = None
+
+        self.conv_cell = ConvUGRNNCell(**self.memory[1])
+
+    def __call__(self, inputs=None, state=None):
+        """
+        Produce outputs given inputs
+        If inputs or state are None, they are initialized from scratch.
+        :Kwargs:
+            - inputs (list)
+                A list of inputs. Inputs are combined using the harbor function
+            - state
+        :Returns:
+            (output, state)
+        """
+
+        with tf.variable_scope(self.name_tmp, reuse=self._reuse):
+
+            if inputs is None:
+                inputs = [self.input_init[0](shape=self.harbor_shape,
+                                             **self.input_init[1])]
+            output = self.harbor[0](inputs, self.harbor_shape, self.name_tmp, reuse=self._reuse, **self.harbor[1])
+
+            pre_name_counter = 0
+            for function, kwargs in self.pre_memory:
+                with tf.variable_scope("pre_" + str(pre_name_counter), reuse=self._reuse):
+                    if function.__name__ == "component_conv":
+                       output = function(output, inputs, **kwargs) # component_conv needs to know the inputs
+                    else:
+                       output = function(output, **kwargs)
+                pre_name_counter += 1
+
+            if state is None:
+                bs = output.get_shape().as_list()[0]
+                state = self.conv_cell.zero_state(bs, dtype = self.dtype_tmp)
+
+            output, state = self.conv_cell(output, state)
+            self.state = tf.identity(state, name='state')
+
+            post_name_counter = 0
+            for function, kwargs in self.post_memory:
+                with tf.variable_scope("post_" + str(post_name_counter), reuse=self._reuse):
+                    if function.__name__ == "component_conv":
+                       output = function(output, inputs, **kwargs)
+                    else:
+                       output = function(output, **kwargs)
+                post_name_counter += 1
+            self.output_tmp = tf.identity(tf.cast(output, self.dtype_tmp), name='output')
+
+            self._reuse = True
+
+        self.state_shape = self.state.shape
+        self.output_tmp_shape = self.output_tmp.shape
+        return self.output_tmp, state
+
+    @property
+    def state_size(self):
+        """
+        Size(s) of state(s) used by this cell.
+        It can be represented by an Integer, a TensorShape or a tuple of Integers
+        or TensorShapes.
+        """
+        # if self.state is not None:
+        return self.state_shape
+        # else:
+        #     raise ValueError('State not initialized yet')
+
+    @property
+    def output_size(self):
+        """
+        Integer or TensorShape: size of outputs produced by this cell.
+        """
+        # if self.output_tmp is not None:
+        return self.output_tmp_shape
+        # else:
+        #     raise ValueError('Output not initialized yet')
+
+class tnn_ConvIntersectionRNNCell(ConvRNNCell):
+
+    def __init__(self,
+                 harbor_shape,
+                 harbor=(harbor, None),
+                 pre_memory=None,
+                 memory=(memory, None),
+                 post_memory=None,
+                 input_init=(tf.zeros, None),
+                 state_init=(tf.zeros, None),
+                 dtype=tf.float32,
+                 name=None
+                 ):
+
+        self.harbor_shape = harbor_shape
+        self.harbor = harbor if harbor[1] is not None else (harbor[0], {})
+        self.pre_memory = pre_memory
+        self.memory = memory if memory[1] is not None else (memory[0], {})
+        self.post_memory = post_memory
+
+        self.input_init = input_init if input_init[1] is not None else (input_init[0], {})
+        self.state_init = state_init if state_init[1] is not None else (state_init[0], {})
+
+        self.dtype_tmp = dtype
+        self.name_tmp = name
+
+        self._reuse = None
+
+        self.conv_cell = ConvIntersectionRNNCell(**self.memory[1])
+
+    def __call__(self, inputs=None, state=None):
+        """
+        Produce outputs given inputs
+        If inputs or state are None, they are initialized from scratch.
+        :Kwargs:
+            - inputs (list)
+                A list of inputs. Inputs are combined using the harbor function
+            - state
+        :Returns:
+            (output, state)
+        """
+
+        with tf.variable_scope(self.name_tmp, reuse=self._reuse):
+
+            if inputs is None:
+                inputs = [self.input_init[0](shape=self.harbor_shape,
+                                             **self.input_init[1])]
+            output = self.harbor[0](inputs, self.harbor_shape, self.name_tmp, reuse=self._reuse, **self.harbor[1])
+
+            pre_name_counter = 0
+            for function, kwargs in self.pre_memory:
+                with tf.variable_scope("pre_" + str(pre_name_counter), reuse=self._reuse):
+                    if function.__name__ == "component_conv":
+                       output = function(output, inputs, **kwargs) # component_conv needs to know the inputs
+                    else:
+                       output = function(output, **kwargs)
+                pre_name_counter += 1
+
+            if state is None:
+                bs = output.get_shape().as_list()[0]
+                state = self.conv_cell.zero_state(bs, dtype = self.dtype_tmp)
+
+            output, state = self.conv_cell(output, state)
+            self.state = tf.identity(state, name='state')
+
+            post_name_counter = 0
+            for function, kwargs in self.post_memory:
+                with tf.variable_scope("post_" + str(post_name_counter), reuse=self._reuse):
+                    if function.__name__ == "component_conv":
+                       output = function(output, inputs, **kwargs)
+                    else:
+                       output = function(output, **kwargs)
+                post_name_counter += 1
+            self.output_tmp = tf.identity(tf.cast(output, self.dtype_tmp), name='output')
+
+            self._reuse = True
+
+        self.state_shape = self.state.shape
+        self.output_tmp_shape = self.output_tmp.shape
+        return self.output_tmp, state
+
+    @property
+    def state_size(self):
+        """
+        Size(s) of state(s) used by this cell.
+        It can be represented by an Integer, a TensorShape or a tuple of Integers
+        or TensorShapes.
+        """
+        # if self.state is not None:
+        return self.state_shape
+        # else:
+        #     raise ValueError('State not initialized yet')
+
+    @property
+    def output_size(self):
+        """
+        Integer or TensorShape: size of outputs produced by this cell.
+        """
+        # if self.output_tmp is not None:
+        return self.output_tmp_shape
+        # else:
+        #     raise ValueError('Output not initialized yet')
+        
 def _conv_linear(args, filter_size, out_depth, bias, bias_initializer=None, kernel_initializer=None, bias_regularizer=None, kernel_regularizer=None):
   """convolution:
   Args:
