@@ -43,7 +43,7 @@ def laplacian_regularizer(scale, scope=None):
         
             # for spatial/feature-factored readout weights, the mask input is shape [H, W, out_channels, 1]
             if weights.get_shape().as_list()[-1] == 1:
-                weights = tf.tranpsose(weights, perm=(0,1,3,2)) # put in order [H, W, 1, out_channels]
+                weights = tf.transpose(weights, perm=(0,1,3,2)) # put in order [H, W, 1, out_channels]
 
             # weights for readout have shape [h, w, d, out_channels]
             weights = tf.transpose(weights, perm=(3,0,1,2)) # out_ch treated as "batch" dimension of a convolution
