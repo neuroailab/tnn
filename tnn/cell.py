@@ -371,7 +371,7 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             h_trans.set_shape([bs, shape[1], shape[2], cs])
             return h_trans
 
-def deconv(inp, shape, weight_decay, ksize, activation, padding, reuse=None):
+def deconv(inp, shape, weight_decay=None, ksize=[3, 3], activation='relu', padding='SAME', reuse=None):
     pat = re.compile(':|/')
     if len(inp.name.split('/')) == 1:
         orig_nm = pat.sub('__', inp.name.split('/')[-1].split('_')[0])
