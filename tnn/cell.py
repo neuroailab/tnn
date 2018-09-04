@@ -371,12 +371,15 @@ def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
             h_trans.set_shape([bs, shape[1], shape[2], cs])
             return h_trans
 
-def deconv(inp, shape, weight_decay, ksize, activation, padding, reuse):
+def deconv(inp, shape, weight_decay, ksize, activation, padding, reuse=None):
     pat = re.compile(':|/')
     if len(inp.name.split('/')) == 1:
         orig_nm = pat.sub('__', inp.name.split('/')[-1].split('_')[0])
     else:
         orig_nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+
+    if len(shape) == len(inp.get_shape().as_list()) - 1: # include batch dimension automatically
+        shape = shape.insert(0, inp.get_shape().as_list()[0])
 
     if inp.shape[1] == shape[1] and inp.shape[2] == shape[2] and inp.shape[3] == shape[3]:
         return tf.image.resize_images(inp, shape[1:3], align_corners=True) # simply do nothing with feedforward input or inputs of the same shape
