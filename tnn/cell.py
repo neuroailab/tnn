@@ -233,7 +233,8 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     print("factored fc name", nm)
                     nm = 'factored_fc_harbor_for_' + nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        out = factored_fc(inp, out_depth=out_depth_per_input, activation=None, flatten=False, bias=0.0)
+                        assert out_depth_per_input is not None
+                        out = factored_fc(inp, out_depth=out_depth_per_input, spatial_mask_init=kernel_init, spatial_mask_init_kwargs=kernel_init_kwargs, feature_kernel_init=kernel_init, feature_kernel_init_kwargs=kernel_init_kwargs, activation=activation, flatten=False, bias=0.0)
                 else:
                     out = tf.image.resize_images(inp, shape[1:3], align_corners=True)
 
