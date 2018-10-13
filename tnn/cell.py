@@ -230,7 +230,6 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     out = deconv(inp, shape=shape, weight_decay=weight_decay, ksize=ksize, activation=activation, padding=padding, reuse=reuse)
                 elif spatial_op == 'factored_fc':
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
-                    print("factored fc name", nm)
                     nm = 'factored_fc_harbor_for_' + nm
                     with tf.variable_scope(nm, reuse=reuse):
                         assert out_depth_per_input is not None
