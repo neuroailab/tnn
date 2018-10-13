@@ -164,7 +164,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
     
     return ff_in, skip_ins, feedback_ins
 
-def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None, ff_inpnm=None, ksize=3, activation=None, kernel_init_kwargs=None, padding='SAME'):
+def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None, ff_inpnm=None, ksize=3, activation=None, kernel_init_kwargs=None, padding='SAME', out_depth_per_input=None):
     '''Helper function that combines the inputs appropriately based on the spatial and channel_ops'''
 
     outputs = []
@@ -228,10 +228,16 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     out = tf.reshape(inp, tf.cast([inp.get_shape().as_list()[0], -1], dtype=tf.int32))
                 elif spatial_op == 'deconv':
                     out = deconv(inp, shape=shape, weight_decay=weight_decay, ksize=ksize, activation=activation, padding=padding, reuse=reuse)
+                elif spatial_op == 'factored_fc':
+                    nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
+                    print("factored fc name", nm)
+                    nm = 'factored_fc_harbor_for_' + nm
+                    with tf.variable_scope(nm, reuse=reuse):
+                        out = factored_fc(inp, out_depth=out_depth_per_input, activation=None, flatten=False, bias=0.0)
                 else:
                     out = tf.image.resize_images(inp, shape[1:3], align_corners=True)
 
-                if channel_op != 'concat' and out.shape[3] != shape[3]:
+                if channel_op != 'concat' and out.shape[3] != shape[3] and spatial_op != 'factored_fc':
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'conv_to_conv_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
@@ -567,7 +573,7 @@ def gate_preproc(inputs, shape, spatial_op, channel_op, kernel_init, weight_deca
     output = tf.add_n(out_terms, name='transform_out')
     return output
 
-def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', kernel_init_kwargs=None, weight_decay=None, dropout=None, ksize=3, activation=None, padding='SAME', reuse=None):
+def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V4', 'pIT', 'aIT'], l1_inpnm='split', preproc=None, spatial_op='resize', channel_op='concat', kernel_init='xavier', kernel_init_kwargs=None, weight_decay=None, dropout=None, ksize=3, activation=None, padding='SAME', reuse=None, out_depth_per_input=None):
     """
     Default harbor function which can crop the input (as a preproc), followed by a spatial_op which by default resizes inputs to a desired shape (or pad or tile), and finished with a channel_op which by default concatenates along the channel dimension (or add or multiply based on user specification).
 
@@ -588,7 +594,7 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V
         output = gate_preproc(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs, padding)
         return output
 
-    output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs, padding)
+    output = input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm, ksize, activation, kernel_init_kwargs, padding, out_depth_per_input=out_depth_per_input)
 
     return output
 
