@@ -15,9 +15,6 @@ import tnn.spatial_transformer
 import tfutils.model
 import copy
 
-BATCH_NORM_DECAY = 0.9
-BATCH_NORM_EPSILON = 1e-5
-
 def laplacian_regularizer(scale, scope=None):
     ''' Compute loss term by filtering a rank-4 tensor with the discrete Laplacian kernel.
     Takes the root-sum-of-squares across space, then sums across the out-channel dimension.
