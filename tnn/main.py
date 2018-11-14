@@ -17,19 +17,22 @@ def _get_func_from_kwargs(function, **kwargs):
     """
     Guess the function from its name
     """
-    try:
-        f = getattr(tnn.cell, function)
-    except:
+    if callable(function):
+        f = function
+    else:
         try:
-            f = getattr(tfutils.model, function)
+            f = getattr(tnn.cell, function)
         except:
             try:
-                f = getattr(tf.nn, function)
+                f = getattr(tfutils.model, function)
             except:
                 try:
-                    f = getattr(tf, function)
+                    f = getattr(tf.nn, function)
                 except:
-                    f = getattr(tf.contrib.layers, function)
+                    try:
+                        f = getattr(tf, function)
+                    except:
+                        f = getattr(tf.contrib.layers, function)
     return f, kwargs
 
 
