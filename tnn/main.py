@@ -302,7 +302,7 @@ def unroll(G, input_seq, ntimes=None, ff_order=None, error_nodes=[]):
                     else:
                         input_shape = input_seq[node][t].shape
                         preds = sorted(G.predecessors(node))
-                        assert(len(preds) != 0)
+                        assert(len(preds) == 1)
                         cell_pred = G.node[preds[0]]['cell']
                         gt_inp = cell_pred.input_init[0](shape=input_shape,
                                                 name=node + 'inp/standin',
@@ -330,9 +330,11 @@ def unroll(G, input_seq, ntimes=None, ff_order=None, error_nodes=[]):
                     for pred in sorted(G.predecessors(node)):
                         inputs.append(G.node[pred]['outputs'][t-1])
                 else:
-                    curr_idx = s.index(node)
                     if node in input_nodes:
-                        inputs.append(input_seq[node][t-curr_idx]) # get delayed input
+                        preds = sorted(G.predecessors(node))
+                        assert(len(preds) == 1)
+                        pred_idx = s.index(preds[0])
+                        inputs.append(input_seq[node][t-pred_idx]) # get input that caused predecessor output
                     for pred in sorted(G.predecessors(node)):
                         inputs.append(G.node[pred]['outputs'][t]) # get current output
 
