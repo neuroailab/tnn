@@ -642,6 +642,7 @@ def component_conv(inp,
          padding='SAME',
          kernel_init='xavier',
          kernel_init_kwargs=None,
+         use_bias=True,
          bias=0,
          weight_decay=None,
          activation=None,
@@ -693,8 +694,10 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
 
 
     new_kernel = tf.concat(kernel_list, axis=-2, name='weights')
-    const_init = tfutils.model.initializer(kind='constant', value=bias)
-    biases = tf.get_variable(initializer=const_init,
+
+    if use_bias:
+        const_init = tfutils.model.initializer(kind='constant', value=bias)
+        biases = tf.get_variable(initializer=const_init,
                             shape=[out_depth],
                             dtype=tf.float32,
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
@@ -703,7 +706,11 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
     conv = tf.nn.conv2d(inp, new_kernel,
                         strides=strides,
                         padding=padding)
-    output = tf.nn.bias_add(conv, biases, name=name)
+
+    if use_bias:
+        output = tf.nn.bias_add(conv, biases, name=name)
+    else:
+        output = tf.identity(conv, name=name)
 
     if batch_norm:
         output = tfutils.model.batchnorm_corr(inputs=output, is_training=is_training, data_format=data_format, decay = batch_norm_decay, epsilon = batch_norm_epsilon, init_zero=init_zero, activation=activation)
