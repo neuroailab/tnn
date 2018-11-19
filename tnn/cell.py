@@ -612,25 +612,32 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
-def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
+def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], padding='SAME', batch_norm=False, is_training=False, init_zero=None, batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True):
     if inp.shape.as_list() == res_inp.shape.as_list():
         return tf.add(inp, res_inp, name="residual_sum")
     elif inp.shape.as_list()[:-1] == res_inp.shape.as_list()[:-1]:
         # need to do a 1x1 conv to fix channels
-        initializer = tfutils.model.initializer(kind=kernel_initializer)
+        initializer = tfutils.model.initializer(kind=kernel_init, **kernel_init_kwargs)
         res_to_out_kernel = tf.get_variable("residual_add_weights",
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
                                             dtype=tf.float32,
                                             initializer=initializer)
-        return tf.add(inp, tf.nn.conv2d(res_inp, res_to_out_kernel, strides=[1,1,1,1], padding='SAME'))
+        projection_out = tf.nn.conv2d(res_inp, res_to_out_kernel, strides=strides, padding=padding)
+        if batch_norm:
+            projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, is_training=is_training, decay=batch_norm_decay, epsilon=batch_norm_epsilon, init_zero=init_zero, activation=None, data_format='channels_last')
+        return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
-        res_inp = tf.image.resize_images(res_inp, inp.shape.as_list()[1:3], align_corners=True)
-        initializer = tfutils.model.initializer(kind=kernel_initializer)
+        if sp_resize: # usually do this if strides are kept to 1 always
+            res_inp = tf.image.resize_images(res_inp, inp.shape.as_list()[1:3], align_corners=True)
+        initializer = tfutils.model.initializer(kind=kernel_init, **kernel_init_kwargs)
         res_to_out_kernel = tf.get_variable("residual_add_weights",
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
                                             dtype=tf.float32,
                                             initializer=initializer)
-        return tf.add(inp, tf.nn.conv2d(res_inp, res_to_out_kernel, strides=[1,1,1,1], padding='SAME'))        
+        projection_out = tf.nn.conv2d(res_inp, res_to_out_kernel, strides=strides, padding=padding)
+        if batch_norm:
+            projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, is_training=is_training, decay=batch_norm_decay, epsilon=batch_norm_epsilon, init_zero=init_zero, activation=None, data_format='channels_last')
+        return tf.add(inp, projection_out)
     
 def component_conv(inp,
          inputs_list,
@@ -642,6 +649,7 @@ def component_conv(inp,
          padding='SAME',
          kernel_init='xavier',
          kernel_init_kwargs=None,
+         use_bias=True,
          bias=0,
          weight_decay=None,
          activation=None,
@@ -693,8 +701,10 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
 
 
     new_kernel = tf.concat(kernel_list, axis=-2, name='weights')
-    const_init = tfutils.model.initializer(kind='constant', value=bias)
-    biases = tf.get_variable(initializer=const_init,
+
+    if use_bias:
+        const_init = tfutils.model.initializer(kind='constant', value=bias)
+        biases = tf.get_variable(initializer=const_init,
                             shape=[out_depth],
                             dtype=tf.float32,
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
@@ -703,7 +713,11 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
     conv = tf.nn.conv2d(inp, new_kernel,
                         strides=strides,
                         padding=padding)
-    output = tf.nn.bias_add(conv, biases, name=name)
+
+    if use_bias:
+        output = tf.nn.bias_add(conv, biases, name=name)
+    else:
+        output = tf.identity(conv, name=name)
 
     if batch_norm:
         output = tfutils.model.batchnorm_corr(inputs=output, is_training=is_training, data_format=data_format, decay = batch_norm_decay, epsilon = batch_norm_epsilon, init_zero=init_zero, activation=activation)
