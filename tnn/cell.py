@@ -612,7 +612,7 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
-def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], padding='SAME', batch_norm=False, is_training=False, init_zero=None, batch_norm_decay=0.9, batch_norm_epsilon=1e-5):
+def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], padding='SAME', batch_norm=False, is_training=False, init_zero=None, batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True):
     if inp.shape.as_list() == res_inp.shape.as_list():
         return tf.add(inp, res_inp, name="residual_sum")
     elif inp.shape.as_list()[:-1] == res_inp.shape.as_list()[:-1]:
@@ -627,7 +627,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
             projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, is_training=is_training, decay=batch_norm_decay, epsilon=batch_norm_epsilon, init_zero=init_zero, activation=None, data_format='channels_last')
         return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
-        res_inp = tf.image.resize_images(res_inp, inp.shape.as_list()[1:3], align_corners=True)
+        if sp_resize: # usually do this if strides are kept to 1 always
+            res_inp = tf.image.resize_images(res_inp, inp.shape.as_list()[1:3], align_corners=True)
         initializer = tfutils.model.initializer(kind=kernel_init, **kernel_init_kwargs)
         res_to_out_kernel = tf.get_variable("residual_add_weights",
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
