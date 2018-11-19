@@ -246,7 +246,62 @@ def unroll(G, input_seq, ntimes=None):
             attr['outputs'].append(output)
             attr['states'].append(state)
 
+def topological_sort(G, ff_order, longest_path_len, node_attr):
+    try:
+        # sort nodes in topological order (very efficient)
+        # will only work for directed graphs (so no feedbacks), otherwise always correct ordering
+        s = nx.topological_sort(G)
+    except:
+        # in the event there are feedbacks
+        # go with the union of the simple paths (not as efficient) between multiple inputs/outputs
 
+        if ff_order is not None:
+            assert(isinstance(ff_order, list))
+            s = ff_order
+        else:
+            # find a longest simple path
+            longest_max_p = None
+            for p in paths:
+                if len(p) == longest_path_len:
+                    longest_max_p = p
+                    break
+
+            s = longest_max_p # likely will contain most of the nodes already
+            for p in paths:
+                for n in p:
+                    if n not in s:
+                        is_pred = False
+                        is_succ = False
+                        for idx, existing_n in enumerate(s):
+                            # find first node that n is a predecessor of 
+                            if n in G.predecessors(existing_n):
+                                s.insert(idx, n)
+                                is_pred = True
+                                break
+                        # if n is not a predecessor of anything currently in s, it is a separate output node
+                        if not is_pred:
+                            # find last node that n is a successor of
+                            successor_idxs = []
+                            for idx, existing_n in enumerate(s):
+                                if n in G.successors(existing_n):
+                                    successor_idxs.append(idx)
+
+                            if len(successor_idxs) > 0:
+                                s.insert(successor_idxs[-1]+1, n)
+                                is_succ = True
+
+                        # n is neither a predecessor or successor
+                        # then n must be the input node of a separate path, insert at the beginning
+                        if not is_pred and not is_succ:
+                            s.insert(0, n)
+
+            print('Cannot topologically sort, assuming this ordering: ', s)
+            print('If you do not want this ordering, pass your own ordering via ff_order')
+
+    # assert all nodes in ordering
+    assert(set(s) == set(node_attr.keys()))
+    return s
+    
 def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
     """
     Unrolls a TensorFlow graph in time, but differs from the unroll() in that
