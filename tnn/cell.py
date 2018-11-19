@@ -612,7 +612,7 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
-def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
+def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier', strides=[1,1,1,1], padding='SAME', batch_norm=False, is_training=False, init_zero=None, batch_norm_decay=0.9, batch_norm_epsilon=1e-5):
     if inp.shape.as_list() == res_inp.shape.as_list():
         return tf.add(inp, res_inp, name="residual_sum")
     elif inp.shape.as_list()[:-1] == res_inp.shape.as_list()[:-1]:
@@ -622,7 +622,10 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
                                             dtype=tf.float32,
                                             initializer=initializer)
-        return tf.add(inp, tf.nn.conv2d(res_inp, res_to_out_kernel, strides=[1,1,1,1], padding='SAME'))
+        projection_out = tf.nn.conv2d(res_inp, res_to_out_kernel, strides=strides, padding=padding)
+        if batch_norm:
+            projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, is_training=is_training, decay=batch_norm_decay, epsilon=batch_norm_epsilon, init_zero=init_zero, activation=None, data_format='channels_last')
+        return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
         res_inp = tf.image.resize_images(res_inp, inp.shape.as_list()[1:3], align_corners=True)
         initializer = tfutils.model.initializer(kind=kernel_initializer)
@@ -630,7 +633,10 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_initializer='xavier'):
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
                                             dtype=tf.float32,
                                             initializer=initializer)
-        return tf.add(inp, tf.nn.conv2d(res_inp, res_to_out_kernel, strides=[1,1,1,1], padding='SAME'))        
+        projection_out = tf.nn.conv2d(res_inp, res_to_out_kernel, strides=strides, padding=padding)
+        if batch_norm:
+            projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, is_training=is_training, decay=batch_norm_decay, epsilon=batch_norm_epsilon, init_zero=init_zero, activation=None, data_format='channels_last')
+        return tf.add(inp, projection_out)
     
 def component_conv(inp,
          inputs_list,
