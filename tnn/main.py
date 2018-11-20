@@ -17,7 +17,7 @@ def _get_func_from_kwargs(function, **kwargs):
     """
     Guess the function from its name
     """
-    if callable(function):
+    if (function is None) or callable(function):
         f = function
     else:
         try:
@@ -246,7 +246,10 @@ def unroll(G, input_seq, ntimes=None):
             attr['outputs'].append(output)
             attr['states'].append(state)
 
-def topological_sort(G, ff_order, longest_path_len, node_attr):
+def topological_sort(G, ff_order, paths, node_attr):
+    path_lengths = map(len, paths)
+    longest_path_len = max(path_lengths) if path_lengths else 0
+
     try:
         # sort nodes in topological order (very efficient)
         # will only work for directed graphs (so no feedbacks), otherwise always correct ordering
@@ -353,7 +356,7 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
         attr['states'] = []
         node_attr[node] = attr
     
-    s = topological_sort(G, ff_order=ff_order, longest_path_len=longest_path_len, node_attr=node_attr)
+    s = topological_sort(G, ff_order=ff_order, paths=paths, node_attr=node_attr)
 
     for t in range(ntimes):  # Loop over time
         for node in s:  # Loop over nodes in topological order
