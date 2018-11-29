@@ -17,19 +17,22 @@ def _get_func_from_kwargs(function, **kwargs):
     """
     Guess the function from its name
     """
-    try:
-        f = getattr(tnn.cell, function)
-    except:
+    if (function is None) or callable(function):
+        f = function
+    else:
         try:
-            f = getattr(tfutils.model, function)
+            f = getattr(tnn.cell, function)
         except:
             try:
-                f = getattr(tf.nn, function)
+                f = getattr(tfutils.model, function)
             except:
                 try:
-                    f = getattr(tf, function)
+                    f = getattr(tf.nn, function)
                 except:
-                    f = getattr(tf.contrib.layers, function)
+                    try:
+                        f = getattr(tf, function)
+                    except:
+                        f = getattr(tf.contrib.layers, function)
     return f, kwargs
 
 
@@ -243,58 +246,9 @@ def unroll(G, input_seq, ntimes=None):
             attr['outputs'].append(output)
             attr['states'].append(state)
 
-
-def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
-    """
-    Unrolls a TensorFlow graph in time, but differs from the unroll() in that
-    a full feedforward pass occurs at each timestep (as in the default 
-    Tensorflow RNN unroller)
-
-    Given a NetworkX DiGraph, connects states and outputs over time for `ntimes`
-    steps, producing a TensorFlow graph unrolled in time.
-
-    :Args:
-        - G
-            NetworkX DiGraph that stores initialized GenFuncCell in 'cell' nodes
-        - input_seq (dict)
-            A dict of inputs that specifies the input for each input node as its keys
-    :Kwargs:
-        - ntimes (int or None, default: None)
-            The number of time steps
-        - ff_order (list or None, default: None)
-            The default feedforward order of the nodes
-            If set to None, the unroller will first try to topologically sort the nodes.
-            However, if there are feedbacks, this will fail, so it will pick the union of
-            simple paths from input to output, and print it. Thus, you can only set ff_order
-            if you have feedbacks and do not want the unroller to pick a path for you.
-    """
-    # find the longest path from the inputs to the outputs:
-    input_nodes = input_seq.keys()
-    check_inputs(G, input_nodes)
-    output_nodes = [n for n in G if len(G.successors(n))==0]
-    inp_out = itertools.product(input_nodes, output_nodes)
-    paths = []
-    for inp, out in inp_out:
-        paths.extend([p for p in nx.all_simple_paths(G, inp, out)])
-
+def topological_sort(G, ff_order, paths, node_attr):
     path_lengths = map(len, paths)
     longest_path_len = max(path_lengths) if path_lengths else 0
-
-    if ntimes is None:
-        ntimes = longest_path_len + 1
-        print('Using a default ntimes of: ', ntimes) # useful for logging
-
-    for k in input_seq.keys():
-        input_val = input_seq[k]
-        if not isinstance(input_val, (tuple, list)):
-            input_seq[k] = [input_val] * ntimes
-
-    node_attr = {}
-    for node, attr in G.nodes(data=True):
-        attr['outputs'] = []
-        attr['states'] = []
-        node_attr[node] = attr
-    
 
     try:
         # sort nodes in topological order (very efficient)
@@ -349,6 +303,60 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
 
     # assert all nodes in ordering
     assert(set(s) == set(node_attr.keys()))
+    return s
+    
+def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
+    """
+    Unrolls a TensorFlow graph in time, but differs from the unroll() in that
+    a full feedforward pass occurs at each timestep (as in the default 
+    Tensorflow RNN unroller)
+
+    Given a NetworkX DiGraph, connects states and outputs over time for `ntimes`
+    steps, producing a TensorFlow graph unrolled in time.
+
+    :Args:
+        - G
+            NetworkX DiGraph that stores initialized GenFuncCell in 'cell' nodes
+        - input_seq (dict)
+            A dict of inputs that specifies the input for each input node as its keys
+    :Kwargs:
+        - ntimes (int or None, default: None)
+            The number of time steps
+        - ff_order (list or None, default: None)
+            The default feedforward order of the nodes
+            If set to None, the unroller will first try to topologically sort the nodes.
+            However, if there are feedbacks, this will fail, so it will pick the union of
+            simple paths from input to output, and print it. Thus, you can only set ff_order
+            if you have feedbacks and do not want the unroller to pick a path for you.
+    """
+    # find the longest path from the inputs to the outputs:
+    input_nodes = input_seq.keys()
+    check_inputs(G, input_nodes)
+    output_nodes = [n for n in G if len(G.successors(n))==0]
+    inp_out = itertools.product(input_nodes, output_nodes)
+    paths = []
+    for inp, out in inp_out:
+        paths.extend([p for p in nx.all_simple_paths(G, inp, out)])
+
+    path_lengths = map(len, paths)
+    longest_path_len = max(path_lengths) if path_lengths else 0
+
+    if ntimes is None:
+        ntimes = longest_path_len + 1
+        print('Using a default ntimes of: ', ntimes) # useful for logging
+
+    for k in input_seq.keys():
+        input_val = input_seq[k]
+        if not isinstance(input_val, (tuple, list)):
+            input_seq[k] = [input_val] * ntimes
+
+    node_attr = {}
+    for node, attr in G.nodes(data=True):
+        attr['outputs'] = []
+        attr['states'] = []
+        node_attr[node] = attr
+    
+    s = topological_sort(G, ff_order=ff_order, paths=paths, node_attr=node_attr)
 
     for t in range(ntimes):  # Loop over time
         for node in s:  # Loop over nodes in topological order
