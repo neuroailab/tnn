@@ -612,7 +612,7 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
-def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], padding='SAME', batch_norm=False, is_training=False, init_zero=None, batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True):
+def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], padding='SAME', batch_norm=False, is_training=False, init_zero=None, batch_norm_decay=0.999, batch_norm_epsilon=1e-3, sp_resize=True):
     if kernel_init_kwargs is None:
         kernel_init_kwargs = {}
     
