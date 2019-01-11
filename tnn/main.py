@@ -27,12 +27,15 @@ def _get_func_from_kwargs(function, **kwargs):
                 f = getattr(tfutils.model, function)
             except:
                 try:
-                    f = getattr(tf.nn, function)
+                   f = getattr(tfutils.model_tool_old, function)
                 except:
                     try:
-                        f = getattr(tf, function)
+                        f = getattr(tf.nn, function)
                     except:
-                        f = getattr(tf.contrib.layers, function)
+                        try:
+                            f = getattr(tf, function)
+                        except:
+                            f = getattr(tf.contrib.layers, function)
     return f, kwargs
 
 

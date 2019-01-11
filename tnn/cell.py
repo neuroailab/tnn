@@ -603,7 +603,11 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     """
     Memory that decays over time
     """
-    initializer = tfutils.model.initializer(kind='constant', value=memory_decay)
+    try:
+        initializer = tfutils.model.initializer(kind='constant', value=memory_decay)
+    except:
+        initializer = tfutils.model_tool_old.initializer(kind='constant', value=memory_decay)
+
     mem = tf.get_variable(initializer=initializer,
                           shape=1,
                           dtype=tf.float32,
@@ -620,7 +624,11 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
         return tf.add(inp, res_inp, name="residual_sum")
     elif inp.shape.as_list()[:-1] == res_inp.shape.as_list()[:-1]:
         # need to do a 1x1 conv to fix channels
-        initializer = tfutils.model.initializer(kind=kernel_init, **kernel_init_kwargs)
+        try:
+            initializer = tfutils.model.initializer(kind=kernel_init, **kernel_init_kwargs)
+        except:
+            initializer = tfutils.model_tool_old.initializer(kind=kernel_init, **kernel_init_kwargs)
+
         res_to_out_kernel = tf.get_variable("residual_add_weights",
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
                                             dtype=tf.float32,
@@ -632,7 +640,10 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
     else: # shape mismatch in spatial dimension
         if sp_resize: # usually do this if strides are kept to 1 always
             res_inp = tf.image.resize_images(res_inp, inp.shape.as_list()[1:3], align_corners=True)
-        initializer = tfutils.model.initializer(kind=kernel_init, **kernel_init_kwargs)
+        try:
+            initializer = tfutils.model.initializer(kind=kernel_init, **kernel_init_kwargs)
+        except:
+            initializer = tfutils.model_tool_old.initializer(kind=kernel_init, **kernel_init_kwargs)
         res_to_out_kernel = tf.get_variable("residual_add_weights",
                                             [1, 1, res_inp.shape.as_list()[-1], inp.shape.as_list()[-1]],
                                             dtype=tf.float32,
@@ -682,7 +693,11 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
     in_depth = inp.get_shape().as_list()[-1]
 
     # weights
-    init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
+    try:
+        init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
+    except:
+        init = tfutils.model_tool_old.initializer(kernel_init, **kernel_init_kwargs)
+
     kernel_list = []
     w_idx = 0
     for input_elem in inputs_list:
@@ -706,7 +721,11 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
     new_kernel = tf.concat(kernel_list, axis=-2, name='weights')
 
     if use_bias:
-        const_init = tfutils.model.initializer(kind='constant', value=bias)
+        try:
+            const_init = tfutils.model.initializer(kind='constant', value=bias)
+        except:
+            const_init = tfutils.model_tool_old.initializer(kind='constant', value=bias)
+
         biases = tf.get_variable(initializer=const_init,
                             shape=[out_depth],
                             dtype=tf.float32,
@@ -762,13 +781,21 @@ def conv_bn(inp,
     in_depth = inp.get_shape().as_list()[-1]
 
     # weights
-    init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
+    try:
+        init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
+    except:
+        init = tfutils.model_tool_old.initializer(kernel_init, **kernel_init_kwargs)
+
     kernel = tf.get_variable(initializer=init,
                             shape=[ksize[0], ksize[1], in_depth, out_depth],
                             dtype=tf.float32,
                             regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
                             name='weights')
-    init = tfutils.model.initializer(kind='constant', value=bias)
+    try:
+        init = tfutils.model.initializer(kind='constant', value=bias)
+    except:
+        init = tfutils.model_tool_old.initializer(kind='constant', value=bias)
+
     biases = tf.get_variable(initializer=init,
                             shape=[out_depth],
                             dtype=tf.float32,
@@ -823,7 +850,11 @@ def spatial_fc(inp,
     in_shape = inp.get_shape().as_list()[1:4]
     
     # kernel
-    init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
+    try:
+        init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
+    except:
+        init = tfutils.model_tool_old.initializer(kernel_init, **kernel_init_kwargs)
+
     reg_func = _get_regularizer(reg_scales)
     kernel = tf.get_variable(initializer=init,
                              shape=[in_shape[0], in_shape[1], in_shape[2], out_depth],
@@ -831,7 +862,11 @@ def spatial_fc(inp,
                              regularizer=reg_func,
                              name='weights')
     
-    init = tfutils.model.initializer(kind='constant', value=bias)
+    try:
+        init = tfutils.model.initializer(kind='constant', value=bias)
+    except:
+        init = tfutils.model_tool_old.initializer(kind='constant', value=bias)
+
     biases = tf.get_variable(initializer=init,
                              shape=[out_depth],
                              dtype=tf.float32,
@@ -898,7 +933,11 @@ def factored_fc(inp,
     in_shape = inp.get_shape().as_list()[1:4]
 
     # spatial mask conv kernel 
-    init = tfutils.model.initializer(spatial_mask_init, **spatial_mask_init_kwargs)
+    try:
+        init = tfutils.model.initializer(spatial_mask_init, **spatial_mask_init_kwargs)
+    except:
+        init = tfutils.model_tool_old.initializer(spatial_mask_init, **spatial_mask_init_kwargs)
+
     reg_func = _get_regularizer(spatial_reg_scales)
 
     # kernel for depthwise convolution with channel_multiplier=1
@@ -910,7 +949,11 @@ def factored_fc(inp,
     #print(spatial_kernel.name, spatial_kernel.get_shape().as_list())
     
     # feature kernel
-    init = tfutils.model.initializer(feature_kernel_init, **feature_kernel_init_kwargs)
+    try:
+        init = tfutils.model.initializer(feature_kernel_init, **feature_kernel_init_kwargs)
+    except:
+        init = tfutils.model_tool_old.initializer(feature_kernel_init, **feature_kernel_init_kwargs)
+
     reg_func = _get_regularizer(feature_reg_scales)
 
     # kernel only operates in D dimension
@@ -920,8 +963,10 @@ def factored_fc(inp,
                              regularizer=reg_func,
                              name='weights_feature')
     #print(feature_kernel.name, feature_kernel.get_shape().as_list())
-    
-    init = tfutils.model.initializer(kind='constant', value=bias)
+    try:    
+        init = tfutils.model.initializer(kind='constant', value=bias)
+    except:
+        init = tfutils.model_tool_old.initializer(kind='constant', value=bias)
     biases = tf.get_variable(initializer=init,
                              shape=[out_depth],
                              dtype=tf.float32,
