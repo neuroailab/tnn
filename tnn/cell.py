@@ -635,7 +635,22 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                             initializer=initializer)
         projection_out = tf.nn.conv2d(res_inp, res_to_out_kernel, strides=strides, padding=padding)
         if batch_norm:
-            projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, is_training=is_training, decay=batch_norm_decay, epsilon=batch_norm_epsilon, init_zero=init_zero, activation=None, data_format='channels_last')
+            try:
+                projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, 
+                                                          is_training=is_training, 
+                                                          decay=batch_norm_decay, 
+                                                          epsilon=batch_norm_epsilon, 
+                                                          init_zero=init_zero, 
+                                                          activation=None, 
+                                                          data_format='channels_last')
+            except:
+                projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
+                                                          is_training=is_training, 
+                                                          decay=batch_norm_decay, 
+                                                          epsilon=batch_norm_epsilon, 
+                                                          init_zero=init_zero, 
+                                                          activation=None, 
+                                                          data_format='channels_last')
         return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
         if sp_resize: # usually do this if strides are kept to 1 always
@@ -650,7 +665,22 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                             initializer=initializer)
         projection_out = tf.nn.conv2d(res_inp, res_to_out_kernel, strides=strides, padding=padding)
         if batch_norm:
-            projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, is_training=is_training, decay=batch_norm_decay, epsilon=batch_norm_epsilon, init_zero=init_zero, activation=None, data_format='channels_last')
+            try:
+                projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, 
+                                                          is_training=is_training, 
+                                                          decay=batch_norm_decay, 
+                                                          epsilon=batch_norm_epsilon, 
+                                                          init_zero=init_zero, 
+                                                          activation=None, 
+                                                          data_format='channels_last')
+            except:
+                projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
+                                                          is_training=is_training, 
+                                                          decay=batch_norm_decay, 
+                                                          epsilon=batch_norm_epsilon, 
+                                                          init_zero=init_zero, 
+                                                          activation=None, 
+                                                          data_format='channels_last')
         return tf.add(inp, projection_out)
     
 def component_conv(inp,
@@ -742,7 +772,22 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
         output = tf.identity(conv, name=name)
 
     if batch_norm:
-        output = tfutils.model.batchnorm_corr(inputs=output, is_training=is_training, data_format=data_format, decay = batch_norm_decay, epsilon = batch_norm_epsilon, init_zero=init_zero, activation=activation)
+        try:
+            output = tfutils.model.batchnorm_corr(inputs=output, 
+                                              is_training=is_training, 
+                                              data_format=data_format, 
+                                              decay = batch_norm_decay, 
+                                              epsilon = batch_norm_epsilon, 
+                                              init_zero=init_zero, 
+                                              activation=activation)
+        except:
+            output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
+                                              is_training=is_training, 
+                                              data_format=data_format, 
+                                              decay = batch_norm_decay, 
+                                              epsilon = batch_norm_epsilon, 
+                                              init_zero=init_zero, 
+                                              activation=activation)
 
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
@@ -809,7 +854,22 @@ def conv_bn(inp,
 
 
     if batch_norm:
-        output = tfutils.model.batchnorm_corr(inputs=output, is_training=is_training, data_format=data_format, decay = batch_norm_decay, epsilon = batch_norm_epsilon, init_zero=init_zero, activation=activation)
+        try:
+            output = tfutils.model.batchnorm_corr(inputs=output, 
+                                              is_training=is_training, 
+                                              data_format=data_format, 
+                                              decay = batch_norm_decay, 
+                                              epsilon = batch_norm_epsilon, 
+                                              init_zero=init_zero, 
+                                              activation=activation)
+        except:
+            output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
+                                              is_training=is_training, 
+                                              data_format=data_format, 
+                                              decay = batch_norm_decay, 
+                                              epsilon = batch_norm_epsilon, 
+                                              init_zero=init_zero, 
+                                              activation=activation)
     
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
