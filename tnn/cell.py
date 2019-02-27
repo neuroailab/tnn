@@ -622,7 +622,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
 
     
     if time_sep:
-        time_suffix is not None
+        assert time_suffix is not None
 
     if kernel_init_kwargs is None:
         kernel_init_kwargs = {}
@@ -649,7 +649,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           epsilon=batch_norm_epsilon, 
                                                           init_zero=init_zero, 
                                                           activation=None, 
-                                                          data_format='channels_last')
+                                                          data_format='channels_last',
+                                                          time_suffix=time_suffix)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
                                                           is_training=is_training, 
@@ -657,7 +658,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           epsilon=batch_norm_epsilon, 
                                                           init_zero=init_zero, 
                                                           activation=None, 
-                                                          data_format='channels_last')
+                                                          data_format='channels_last',
+                                                          time_suffix=time_suffix)
         return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
         if sp_resize: # usually do this if strides are kept to 1 always
@@ -679,7 +681,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           epsilon=batch_norm_epsilon, 
                                                           init_zero=init_zero, 
                                                           activation=None, 
-                                                          data_format='channels_last')
+                                                          data_format='channels_last',
+                                                          time_suffix=time_suffix)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
                                                           is_training=is_training, 
@@ -687,7 +690,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           epsilon=batch_norm_epsilon, 
                                                           init_zero=init_zero, 
                                                           activation=None, 
-                                                          data_format='channels_last')
+                                                          data_format='channels_last',
+                                                          time_suffix=time_suffix)
         return tf.add(inp, projection_out)
     
 def component_conv(inp,
@@ -791,7 +795,8 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               decay = batch_norm_decay, 
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
-                                              activation=activation)
+                                              activation=activation,
+                                              time_suffix=time_suffix)
         except:
             output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
                                               is_training=is_training, 
@@ -799,7 +804,8 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               decay = batch_norm_decay, 
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
-                                              activation=activation)
+                                              activation=activation,
+                                              time_suffix=time_suffix)
 
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
