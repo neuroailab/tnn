@@ -3,6 +3,7 @@ from tensorflow.contrib.rnn import LSTMStateTuple
 import tfutils.model
 from tnn.cell import *
 from tnn.main import _get_func_from_kwargs
+import copy
 
 class ConvRNNCell(object):
     """Abstract object representing an Convolutional RNN cell.
@@ -93,7 +94,14 @@ class ReciprocalGateCell(ConvRNNCell):
                  recurrent_keep_prob=1.0,
                  total_training_steps=250000,
                  norm_gain=1.0,
-                 norm_shift=0.0):
+                 norm_shift=0.0,
+                 batch_norm=False,
+                 batch_norm_cell_out=False,
+                 batch_norm_decay=0.9,
+                 batch_norm_epsilon=1e-5,
+                 gate_tau_bn_gamma_init=None,
+                 edges_init_zero=False,
+                 is_training=False):
         """ 
         Initialize the memory function of the ReciprocalGateCell.
 
@@ -199,7 +207,10 @@ class ReciprocalGateCell(ConvRNNCell):
             
         if kernel_initializer_kwargs is None:
             kernel_initializer_kwargs = {}
-        self._kernel_initializer = tfutils.model.initializer(kind=kernel_initializer, **kernel_initializer_kwargs)
+        try:
+            self._kernel_initializer = tfutils.model.initializer(kind=kernel_initializer, **kernel_initializer_kwargs)
+        except:
+            self._kernel_initializer = tfutils.model_tool_old.initializer(kind=kernel_initializer, **kernel_initializer_kwargs)
         self._bias_initializer = bias_initializer
         
         if weight_decay is None:
@@ -212,6 +223,19 @@ class ReciprocalGateCell(ConvRNNCell):
         self.recurrent_keep_prob = recurrent_keep_prob
         self.total_training_steps = total_training_steps
         
+        try:
+            self._batch_norm_func = tfutils.model.batchnorm_corr
+        except:
+            self._batch_norm_func = tfutils.model_tool_old.batchnorm_corr
+
+        self._batch_norm = batch_norm
+        self._batch_norm_cell_out = batch_norm_cell_out
+        self._batch_norm_decay = batch_norm_decay
+        self._batch_norm_epsilon = batch_norm_epsilon
+        self._is_training = is_training
+        self._gate_tau_bn_gamma_init = gate_tau_bn_gamma_init
+        self._edges_init_zero = edges_init_zero
+
     def state_size(self):
         return {'cell':self._cell_size, 'out':self._size}
 
@@ -245,6 +269,216 @@ class ReciprocalGateCell(ConvRNNCell):
         normalized = tf.contrib.layers.layer_norm(inp, reuse=True, scope=scope)
         return normalized
 
+    def _conv(self,
+              inp, 
+              filter_size, 
+              out_depth, 
+              scope, 
+              use_bias=True, 
+              bias_initializer=None, 
+              kernel_initializer=None, 
+              weight_decay=None, 
+              data_format='channels_last',
+              is_training=True,
+              batch_norm=False,
+              batch_norm_decay=0.9,
+              batch_norm_epsilon=1e-5,
+              batch_norm_init_zero=False,
+              batch_norm_constant_init=None,
+              time_sep=False,
+              time_suffix=None):
+        """convolution:
+        Args:
+        args: a 4D Tensor or a list of 4D, batch x n, Tensors.
+        filter_size: int tuple of filter height and width.
+        out_depth: int, number of features.
+        bias: boolean as to whether to have a bias.
+        bias_initializer: starting value to initialize the bias.
+        kernel_initializer: starting value to initialize the kernel.
+        Returns:
+        A 4D Tensor with shape [batch h w out_depth]
+        Raises:
+        ValueError: if some of the arguments has unspecified or wrong shape.
+        """
+
+        # Calculate the total size of arguments on dimension 1.
+
+        if time_sep:
+            assert time_suffix is not None
+
+        if batch_norm:
+            use_bias = False # unnecessary in this case
+
+        dtype = inp.dtype
+        shape = inp.shape.as_list()
+        if data_format == 'channels_last':
+            h = shape[1]
+            w = shape[2]
+            in_depth = shape[3]
+            data_format = 'NHWC'
+        elif data_format == 'channels_first':
+            h = shape[2]
+            w = shape[3]
+            in_depth = shape[1]
+            data_format = 'NCHW'
+          
+        if filter_size[0] > h:
+            filter_size[0] = h
+        if filter_size[1] > w:
+            filter_size[1] = w
+          
+        if weight_decay is None:
+            weight_decay = 0.
+        if kernel_initializer is None:
+            kernel_initializer = tf.contrib.layers.xavier_initializer()
+        if bias_initializer is None:
+            bias_initializer = tf.contrib.layers.xavier_initializer()
+
+        # Now the computation.
+        with tf.variable_scope(scope):
+            kernel = tf.get_variable(
+              "weights", [filter_size[0], filter_size[1], in_depth, out_depth], 
+              dtype=dtype, 
+              initializer=kernel_initializer, 
+              regularizer=tf.contrib.layers.l2_regularizer(weight_decay))
+              
+            out = tf.nn.conv2d(inp, kernel, strides=[1, 1, 1, 1], padding='SAME')
+
+            if batch_norm:             
+                out = self._batch_norm_func(inputs=out, 
+                                                   is_training=is_training, 
+                                                   data_format=data_format, 
+                                                   decay = batch_norm_decay, 
+                                                   epsilon = batch_norm_epsilon,
+                                                   constant_init=batch_norm_constant_init, 
+                                                   init_zero=batch_norm_init_zero, 
+                                                   activation=None,
+                                                   time_suffix=time_suffix)
+
+            elif use_bias:
+                if bias_initializer is None:
+                    bias_initializer = tf.constant_initializer(0.0, dtype=dtype)
+                    bias_term = tf.get_variable(
+                                        "bias", [out_depth],
+                                        dtype=dtype,
+                                        initializer=bias_initializer)
+
+                out = out + bias_term                   
+                     
+            return out       
+
+    def _ds_conv(self,
+                 inp, 
+                 filter_size, 
+                 out_depth, 
+                 scope, 
+                 use_bias=True, 
+                 repeat=False, 
+                 intermediate_activation=tf.nn.elu, 
+                 ch_mult=1, 
+                 bias_initializer=None, 
+                 kernel_initializer=None, 
+                 weight_decay=None, 
+                 data_format='channels_last',
+                 is_training=True,
+                 batch_norm=False,
+                 batch_norm_decay=0.9,
+                 batch_norm_epsilon=1e-5,
+                 batch_norm_init_zero=False,
+                 batch_norm_constant_init=None,
+                 time_sep=False,
+                 time_suffix=None):
+
+        if time_sep:
+            assert time_suffix is not None
+
+        if batch_norm:
+            use_bias = False # unnecessary in this case
+
+        ksize = [f for f in filter_size]
+        dtype = inp.dtype
+        shape = inp.shape.as_list()
+        if data_format == 'channels_last':
+            h = shape[1]
+            w = shape[2]
+            in_depth = shape[3]
+            data_format = 'NHWC'
+        elif data_format == 'channels_first':
+            h = shape[2]
+            w = shape[3]
+            in_depth = shape[1]
+            data_format = 'NCHW'
+        
+        if filter_size[0] > h:
+            ksize[0] = h
+        if filter_size[1] > w:
+            ksize[1] = w
+
+        if out_depth is None:
+            out_depth = in_depth
+        
+        if weight_decay is None:
+            weight_decay = 0.
+        if kernel_initializer is None:
+            kernel_initializer = tf.contrib.layers.xavier_initializer()
+        if bias_initializer is None:
+            bias_initializer = tf.contrib.layers.xavier_initializer()
+
+        with tf.variable_scope(scope):
+
+            depthwise_filter = tf.get_variable("depthwise_weights",
+                                               [ksize[0], ksize[1], in_depth, ch_mult],
+                                               dtype=dtype,
+                                               initializer=kernel_initializer,
+                                               regularizer=tf.contrib.layers.l2_regularizer(weight_decay))
+
+            pointwise_filter = tf.get_variable("pointwise_weights",
+                                               [1, 1, in_depth*ch_mult, out_depth],
+                                               dtype=dtype,
+                                               initializer=kernel_initializer,
+                                               regularizer=tf.contrib.layers.l2_regularizer(weight_decay))
+
+            if repeat:
+                depthwise_filter_0 = tf.get_variable("depthwise_weights_0",
+                                                     [ksize[0], ksize[1], in_depth, ch_mult],
+                                                     dtype=dtype,
+                                                     initializer=kernel_initializer,
+                                                     regularizer=tf.contrib.layers.l2_regularizer(weight_decay))
+                inp = tf.nn.depthwise_conv2d(inp, depthwise_filter_0, strides=[1,1,1,1], padding='SAME', name="ds_conv0")
+                inp = intermediate_activation(inp)
+
+            out = tf.nn.separable_conv2d(inp, depthwise_filter, pointwise_filter, strides=[1,1,1,1], padding='SAME', name="ds_conv")
+
+            if batch_norm:             
+                out = self._batch_norm_func(inputs=out, 
+                                                   is_training=is_training, 
+                                                   data_format=data_format, 
+                                                   decay = batch_norm_decay, 
+                                                   epsilon = batch_norm_epsilon,
+                                                   constant_init=batch_norm_constant_init, 
+                                                   init_zero=batch_norm_init_zero, 
+                                                   activation=None,
+                                                   time_suffix=time_suffix)
+            elif use_bias:
+                bias = tf.get_variable("bias",
+                                       [out_depth],
+                                       dtype=dtype,
+                                       initializer=bias_initializer)
+                out = out + bias                    
+                     
+            return out
+
+    def _drop_recurrent_step(self, hidden, keep_prob, is_training=True):
+
+        if is_training:
+            batch_size = tf.shape(hidden)[0]
+            noise_shape = [batch_size, 1, 1, 1]
+            random_tensor = keep_prob        
+            random_tensor += tf.random_uniform(shape=noise_shape, dtype=tf.float32)
+            binary_tensor = tf.floor(random_tensor)
+            hidden = tf.div(hidden, keep_prob) * binary_tensor
+        return hidden
+
     def _apply_recurrent_dropout(self, inp, current_step=None):
 
         keep_prob = self.recurrent_keep_prob
@@ -258,35 +492,67 @@ class ReciprocalGateCell(ConvRNNCell):
             current_ratio = tf.minimum(1.0, current_ratio)
 
             keep_prob = (1 - current_ratio * (1 - keep_prob))
-            inp = drop_recurrent_step(inp, keep_prob)
+            inp = self._drop_recurrent_step(inp, keep_prob, is_training=self._is_training)
         return inp
 
-    def _apply_temporal_op(self, inp, filter_size, out_depth, scope, separable, bias=True, data_format='channels_last'):
+    def _apply_temporal_op(self, 
+                           inp, 
+                           filter_size, 
+                           out_depth, 
+                           scope, 
+                           separable, 
+                           use_bias=True, 
+                           data_format='channels_last', 
+                           batch_norm_init_zero=False,
+                           batch_norm_constant_init=None,
+                           time_sep=False,
+                           time_suffix=None):
         """
         Wrapper for _conv and _ds_conv that applies recurrent dropout and other cell-shared kwargs
         """
         if separable:
-            inp = _ds_conv(inp, filter_size, out_depth, scope, bias=bias,
+            inp = self._ds_conv(inp, filter_size, out_depth, scope, 
+                           use_bias=use_bias,
                            repeat=self.ds_repeat,
                            intermediate_activation=tf.nn.elu,
                            kernel_initializer=self._kernel_initializer,
-                           weight_decay=self._weight_decay)
+                           weight_decay=self._weight_decay,
+                           is_training=self._is_training,
+                           batch_norm=self._batch_norm,
+                           batch_norm_decay=self._batch_norm_decay,
+                           batch_norm_epsilon=self._batch_norm_epsilon,
+                           batch_norm_init_zero=batch_norm_init_zero,
+                           batch_norm_constant_init=batch_norm_constant_init,
+                           time_sep=time_sep,
+                           time_suffix=time_suffix)
         else: # not separable, use regular conv
-            inp = _conv(inp, filter_size, out_depth, scope, bias=bias,
+            inp = self._conv(inp, filter_size, out_depth, scope, 
+                        use_bias=use_bias,
                         kernel_initializer=self._kernel_initializer,
-                        weight_decay=self._weight_decay)
+                        weight_decay=self._weight_decay,
+                        is_training=self._is_training,
+                        batch_norm=self._batch_norm,
+                        batch_norm_decay=self._batch_norm_decay,
+                        batch_norm_epsilon=self._batch_norm_epsilon,
+                        batch_norm_init_zero=batch_norm_init_zero,
+                        batch_norm_constant_init=batch_norm_constant_init,
+                        time_sep=time_sep,
+                        time_suffix=time_suffix)
 
         # apply recurrent dropout
         inp = self._apply_recurrent_dropout(inp)
         return inp
     
-    def __call__(self, inputs, state, fb_input, res_input):
+    def __call__(self, inputs, state, fb_input, res_input, time_sep=False, time_suffix=None):
         """
         Produce outputs of RecipCell, given inputs and previous state {'cell':cell_state, 'out':out_state}
 
         inputs: dict w keys ('ff', 'fb'). ff and fb inputs must have the same shape. 
         """
 
+        if time_sep:
+            assert time_suffix is not None
+            
         dtype = inputs.dtype
 
         if self.use_cell:
@@ -301,7 +567,14 @@ class ReciprocalGateCell(ConvRNNCell):
                 self.in_depth = inputs.shape.as_list()[-1]
                 
                 if self.feedback_entry == 'input' and fb_input is not None:
-                    fb_input = self._apply_temporal_op(fb_input, self.feedback_filter_size, self.in_depth, separable=self.feedback_depth_separable, scope="feedback")
+                    fb_input = self._apply_temporal_op(fb_input, 
+                                                       self.feedback_filter_size, 
+                                                       self.in_depth, 
+                                                       separable=self.feedback_depth_separable, 
+                                                       scope="feedback",
+                                                       batch_norm_init_zero=self._edges_init_zero,
+                                                       time_sep=time_sep,
+                                                       time_suffix=time_suffix)
                     inputs += self._feedback_activation(fb_input)
 
 
@@ -316,21 +589,54 @@ class ReciprocalGateCell(ConvRNNCell):
                     if self.cell_residual:
                         assert res_input is not None
                     if res_input is not None and self.cell_residual:
-                        cell_input += self._apply_temporal_op(res_input, self.ff_filter_size, self.cell_depth, separable=self.ff_depth_separable, scope="res_to_cell")
+                        cell_input += self._apply_temporal_op(res_input, 
+                                                              self.ff_filter_size, 
+                                                              self.cell_depth, 
+                                                              separable=self.ff_depth_separable, 
+                                                              scope="res_to_cell",
+                                                              time_sep=time_sep,
+                                                              time_suffix=time_suffix)
 
                     if self.input_to_cell:
-                        cell_input += self._apply_temporal_op(inputs, self.ff_filter_size, self.cell_depth, separable=self.ff_depth_separable, scope="input_to_cell")                        
+                        cell_input += self._apply_temporal_op(inputs, 
+                                                              self.ff_filter_size, 
+                                                              self.cell_depth, 
+                                                              separable=self.ff_depth_separable, 
+                                                              scope="input_to_cell",
+                                                              time_sep=time_sep,
+                                                              time_suffix=time_suffix)                        
 
                     if fb_input is not None and self.feedback_entry == 'cell':
-                        fb_input += self._apply_temporal_op(fb_input, self.feedback_filter_size, self.cell_depth, separable=self.feedback_depth_separable, scope="feedback")
+                        fb_input += self._apply_temporal_op(fb_input, 
+                                                            self.feedback_filter_size, 
+                                                            self.cell_depth, 
+                                                            separable=self.feedback_depth_separable, 
+                                                            scope="feedback",
+                                                            batch_norm_init_zero=self._edges_init_zero,
+                                                            time_sep=time_sep,
+                                                            time_suffix=time_suffix)
                         cell_input += self._feedback_activation(fb_input)
 
                     # ops
                     # cell tau
-                    cell_tau = self._apply_temporal_op(prev_cell, self.cell_tau_filter_size, self.cell_depth, separable=self.tau_depth_separable, scope="tau")
+                    cell_tau = self._apply_temporal_op(prev_cell, 
+                                                       self.cell_tau_filter_size, 
+                                                       self.cell_depth, 
+                                                       separable=self.tau_depth_separable, 
+                                                       scope="tau",
+                                                       batch_norm_constant_init=self._gate_tau_bn_gamma_init,
+                                                       time_sep=time_sep,
+                                                       time_suffix=time_suffix)
 
                     # cell gate
-                    cell_gate = self._apply_temporal_op(prev_out, self.gate_filter_size, self.cell_depth, separable=self.gate_depth_separable, scope="gate")                    
+                    cell_gate = self._apply_temporal_op(prev_out, 
+                                                        self.gate_filter_size, 
+                                                        self.cell_depth, 
+                                                        separable=self.gate_depth_separable, 
+                                                        scope="gate",
+                                                        batch_norm_constant_init=self._gate_tau_bn_gamma_init,
+                                                        time_sep=time_sep,
+                                                        time_suffix=time_suffix)                   
                     cell_tau = self._tau_nonlinearity(cell_tau)
                     cell_gate = self._gate_nonlinearity(cell_gate)
 
@@ -338,6 +644,17 @@ class ReciprocalGateCell(ConvRNNCell):
 
                     if self._layer_norm:
                         next_cell = self._norm(next_cell, scope="cell_layer_norm", dtype=dtype)
+                    elif self._batch_norm_cell_out:
+                        next_cell = self._batch_norm_func(inputs=next_cell, 
+                                                           is_training=self._is_training, 
+                                                           data_format='channels_last', 
+                                                           decay = self._batch_norm_decay, 
+                                                           epsilon = self._batch_norm_epsilon, 
+                                                           init_zero=False, 
+                                                           constant_init=None, 
+                                                           activation=None,
+                                                           time_suffix=time_suffix)
+
                     next_cell = self._cell_activation(next_cell)
 
             with tf.variable_scope('out'):
@@ -345,7 +662,21 @@ class ReciprocalGateCell(ConvRNNCell):
                 if self.input_to_out:
                     # never apply dropout here
                     if self.in_out_depth_separable:
-                        out_input = _ds_conv(inputs, self.in_out_filter_size, out_depth=self.out_depth, bias=True, scope="input_to_out", kernel_initializer=self._kernel_initializer, bias_initializer=self._bias_initializer, weight_decay=self._weight_decay, repeat=self.ds_repeat)                        
+                        out_input = self._ds_conv(inputs, 
+                                             self.in_out_filter_size, 
+                                             out_depth=self.out_depth, 
+                                             use_bias=True, 
+                                             scope="input_to_out", 
+                                             kernel_initializer=self._kernel_initializer, 
+                                             bias_initializer=self._bias_initializer, 
+                                             weight_decay=self._weight_decay, 
+                                             repeat=self.ds_repeat,
+                                             is_training=self._is_training,
+                                             batch_norm=self._batch_norm,
+                                             batch_norm_decay=self._batch_norm_decay,
+                                             batch_norm_epsilon=self._batch_norm_epsilon,
+                                             time_sep=time_sep,
+                                             time_suffix=time_suffix)                        
                     else:
                         in_to_out_kernel = tf.get_variable("input_to_out_weights",
                                                            [self.in_out_filter_size[0], self.in_out_filter_size[1], self.out_depth, self.out_depth],
@@ -357,36 +688,97 @@ class ReciprocalGateCell(ConvRNNCell):
                         in_to_out_bias = tf.get_variable("input_to_out_bias", [self.out_depth], dtype=dtype, initializer=self._bias_initializer)
 
                         out_input = tf.nn.conv2d(inputs, in_to_out_kernel, strides=[1,1,1,1], padding='SAME', name="out_input")
+
+                        if self._batch_norm:
+                            out_input = self._batch_norm_func(inputs=out_input, 
+                                                               is_training=self._is_training, 
+                                                               data_format='channels_last', 
+                                                               decay = self._batch_norm_decay, 
+                                                               epsilon = self._batch_norm_epsilon, 
+                                                               init_zero=False, 
+                                                               constant_init=None, 
+                                                               activation=None,
+                                                               time_suffix=time_suffix)      
                 else:
                     out_input = tf.identity(inputs, name="out_input")
 
                 if self.cell_to_out and self.use_cell:
-                    out_input += self._apply_temporal_op(prev_cell, self.gate_filter_size, self.out_depth, separable=self.gate_depth_separable, scope="gate")
+                    out_input += self._apply_temporal_op(prev_cell, 
+                                                         self.gate_filter_size, 
+                                                         self.out_depth, 
+                                                         separable=self.gate_depth_separable, 
+                                                         scope="gate",
+                                                         time_sep=time_sep,
+                                                         time_suffix=time_suffix)
 
                 if res_input is not None and self.out_residual:
-                    out_input = residual_add(out_input, res_input)                    
+                    with tf.variable_scope('res_add'):
+                        out_input = residual_add(out_input, res_input,
+                                             batch_norm=self._batch_norm,
+                                             batch_norm_decay=self._batch_norm_decay,
+                                             batch_norm_epsilon=self._batch_norm_epsilon,
+                                             is_training=self._is_training,
+                                             init_zero=False,
+                                             sp_resize=True,
+                                             time_sep=time_sep,
+                                             time_suffix=time_suffix)                   
                     
                 if fb_input is not None and self.feedback_entry == 'out':
                     if fb_input.shape.as_list()[1:3] == prev_out.shape.as_list()[1:3]:
-                        fb_input = self._apply_temporal_op(fb_input, self.feedback_filter_size, self.out_depth, separable=self.feedback_depth_separable, scope="feedback")
+                        fb_input = self._apply_temporal_op(fb_input, 
+                                                           self.feedback_filter_size, 
+                                                           self.out_depth, 
+                                                           separable=self.feedback_depth_separable, 
+                                                           scope="feedback",
+                                                           batch_norm_init_zero=self._edges_init_zero,
+                                                           time_sep=time_sep,
+                                                           time_suffix=time_suffix)
                         out_input += self._feedback_activation(fb_input)
                     else:
                         assert self.feedback_filter_size == fb_input.shape.as_list()[1:3]
-                        fb_input = self._apply_temporal_op(fb_input, self.feedback_filter_size, self.out_depth, separable=self.feedback_depth_separable, scope="feedback")
+                        fb_input = self._apply_temporal_op(fb_input, 
+                                                           self.feedback_filter_size, 
+                                                           self.out_depth, 
+                                                           separable=self.feedback_depth_separable, 
+                                                           scope="feedback",
+                                                           batch_norm_init_zero=self._edges_init_zero,
+                                                           time_sep=time_sep,
+                                                           time_suffix=time_suffix)
                         out_input += self._feedback_activation(fb_input)                        
 
                     
                 # ops
-                out_tau = self._apply_temporal_op(prev_out, self.tau_filter_size, self.out_depth, separable=self.tau_depth_separable, scope="tau")
+                out_tau = self._apply_temporal_op(prev_out, 
+                                                  self.tau_filter_size, 
+                                                  self.out_depth, 
+                                                  separable=self.tau_depth_separable, 
+                                                  scope="tau",
+                                                  batch_norm_constant_init=self._gate_tau_bn_gamma_init,
+                                                  time_sep=time_sep,
+                                                  time_suffix=time_suffix)
 
                 if self.use_cell and not self.cell_to_out:
-                    out_gate = self._apply_temporal_op(prev_cell, self.gate_filter_size, self.out_depth, separable=self.gate_depth_separable, scope="gate")
+                    out_gate = self._apply_temporal_op(prev_cell, 
+                                                       self.gate_filter_size, 
+                                                       self.out_depth, 
+                                                       separable=self.gate_depth_separable, 
+                                                       scope="gate",
+                                                       batch_norm_constant_init=self._gate_tau_bn_gamma_init,
+                                                       time_sep=time_sep,
+                                                       time_suffix=time_suffix)
                 else:
                     out_gate = tf.zeros(shape=out_input.shape.as_list(), dtype=tf.float32, name='out_gate')
 
 
                 if res_input is not None and self.residual_to_out_gate:
-                    out_gate += self._apply_temporal_op(res_input, self.gate_filter_size, self.out_depth, separable=self.gate_depth_separable, scope="residual_to_out_gate")
+                    out_gate += self._apply_temporal_op(res_input, 
+                                                        self.gate_filter_size, 
+                                                        self.out_depth, 
+                                                        separable=self.gate_depth_separable, 
+                                                        scope="residual_to_out_gate",
+                                                        batch_norm_constant_init=self._gate_tau_bn_gamma_init,
+                                                        time_sep=time_sep,
+                                                        time_suffix=time_suffix)
 
                 out_tau = self._tau_nonlinearity(out_tau)
                 out_gate = self._gate_nonlinearity(out_gate)
@@ -395,6 +787,17 @@ class ReciprocalGateCell(ConvRNNCell):
                     
                 if self._layer_norm:
                     next_out = self._norm(next_out, scope="out_layer_norm", dtype=dtype)
+                elif self._batch_norm_cell_out:
+                    next_out = self._batch_norm_func(inputs=next_out, 
+                                                       is_training=self._is_training, 
+                                                       data_format='channels_last', 
+                                                       decay = self._batch_norm_decay, 
+                                                       epsilon = self._batch_norm_epsilon, 
+                                                       init_zero=False, 
+                                                       constant_init=None, 
+                                                       activation=None,
+                                                       time_suffix=time_suffix)
+
                 next_out = self._out_activation(next_out)
 
                 if self.use_cell:
@@ -433,6 +836,8 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
 
         self._reuse = None
 
+        self.internal_time = 0
+
         # signature: ReciprocalGateCell(shape, ff_filter_size, cell_filter_size, cell_depth, out_depth, **kwargs)
         self._strides = self.pre_memory[0][1].get('strides', [1,1,1,1])[1:3]
         self.memory[1]['shape'] = self.memory[1].get('shape', [self.harbor_shape[1] // self._strides[0], self.harbor_shape[2] // self._strides[1]])
@@ -442,7 +847,9 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
         if 'out_depth' not in self.memory[1]:
             self.memory[1]['out_depth'] = self.pre_memory[idx][1]['out_depth']
 
-        self.conv_cell = ReciprocalGateCell(**self.memory[1])
+        mem_kwargs = copy.deepcopy(self.memory[1])
+        mem_kwargs.pop('time_sep', None)
+        self.conv_cell = ReciprocalGateCell(**mem_kwargs)
 
 
     def __call__(self, inputs=None, state=None):
@@ -479,9 +886,13 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
                     output, fb_input = tf.split(output, num_or_size_splits=[ff_depth, fb_depth], axis=3)
 
             res_input = None
+            curr_time_suffix = 't' + str(self.internal_time)
             pre_name_counter = 0
             for function, kwargs in self.pre_memory:
                 with tf.variable_scope("pre_" + str(pre_name_counter), reuse=self._reuse):
+                    if kwargs.get('time_sep', False):
+                        kwargs['time_suffix'] = curr_time_suffix # used for scoping in the op
+
                     if function.__name__ == "component_conv":
                         if kwargs.get('return_input', False):
                             output, res_input = function(output, [inputs[ff_idx]], **kwargs) # component_conv needs to know the inputs
@@ -496,12 +907,19 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
                 batch_size = output.get_shape().as_list()[0]
                 state = self.conv_cell.zero_state(batch_size, dtype=self.dtype_tmp)
 
-            output, state = self.conv_cell(output, state, fb_input, res_input)
+            if self.memory[1].get('time_sep', False):
+                output, state = self.conv_cell(output, state, fb_input, res_input, time_sep=True, time_suffix=curr_time_suffix)
+            else:
+                output, state = self.conv_cell(output, state, fb_input, res_input, time_sep=False, time_suffix=None)
+
             self.state = tf.identity(state, name="state")
 
             post_name_counter = 0
             for function, kwargs in self.post_memory:
                 with tf.variable_scope("post_" + str(post_name_counter), reuse=self._reuse):
+                    if kwargs.get('time_sep', False):
+                        kwargs['time_suffix'] = curr_time_suffix # used for scoping in the op
+
                     if function.__name__ == "component_conv":
                        output = function(output, inputs, **kwargs)
                     else:
@@ -515,6 +933,9 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
 
         self.state_shape = self.conv_cell.state_size() # DELETE?
         self.output_tmp_shape = self.output_tmp.shape # DELETE?
+
+        self.internal_time = self.internal_time + 1
+
         return self.output_tmp, self.state
 
     @property
@@ -537,143 +958,4 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
         # if self.output_tmp is not None:
         return self.output_tmp_shape
         # else:
-        #     raise ValueError('Output not initialized yet')        
-
-
-def _conv(inp, filter_size, out_depth, scope, bias=True, bias_initializer=None, kernel_initializer=None, weight_decay=None, data_format='channels_last'):
-  """convolution:
-  Args:
-    args: a 4D Tensor or a list of 4D, batch x n, Tensors.
-    filter_size: int tuple of filter height and width.
-    out_depth: int, number of features.
-    bias: boolean as to whether to have a bias.
-    bias_initializer: starting value to initialize the bias.
-    kernel_initializer: starting value to initialize the kernel.
-  Returns:
-    A 4D Tensor with shape [batch h w out_depth]
-  Raises:
-    ValueError: if some of the arguments has unspecified or wrong shape.
-  """
-
-  # Calculate the total size of arguments on dimension 1.
-
-  dtype = inp.dtype
-  shape = inp.shape.as_list()
-  if data_format == 'channels_last':
-      h = shape[1]
-      w = shape[2]
-      in_depth = shape[3]
-      data_format = 'NHWC'
-  elif data_format == 'channels_first':
-      h = shape[2]
-      w = shape[3]
-      in_depth = shape[1]
-      data_format = 'NCHW'
-      
-  if filter_size[0] > h:
-      filter_size[0] = h
-  if filter_size[1] > w:
-      filter_size[1] = w
-      
-  if weight_decay is None:
-      weight_decay = 0.
-  if kernel_initializer is None:
-      kernel_initializer = tf.contrib.layers.xavier_initializer()
-  if bias_initializer is None:
-      bias_initializer = tf.contrib.layers.xavier_initializer()
-
-  # Now the computation.
-  with tf.variable_scope(scope):
-      kernel = tf.get_variable(
-          "weights", [filter_size[0], filter_size[1], in_depth, out_depth], dtype=dtype, initializer=kernel_initializer, regularizer=tf.contrib.layers.l2_regularizer(weight_decay))
-          
-      inp = tf.nn.conv2d(inp, kernel, strides=[1, 1, 1, 1], padding='SAME')
-      if not bias:
-        return inp
-      if bias_initializer is None:
-        bias_initializer = tf.constant_initializer(0.0, dtype=dtype)
-      bias_term = tf.get_variable(
-          "bias", [out_depth],
-          dtype=dtype,
-          initializer=bias_initializer)
-
-      return inp + bias_term        
-
-def _ds_conv(inp, filter_size, out_depth, scope, bias=True, repeat=False, intermediate_activation=tf.nn.elu, ch_mult=1, bias_initializer=None, kernel_initializer=None, weight_decay=None, data_format='channels_last'):
-
-    ksize = [f for f in filter_size]
-    dtype = inp.dtype
-    shape = inp.shape.as_list()
-    if data_format == 'channels_last':
-        h = shape[1]
-        w = shape[2]
-        in_depth = shape[3]
-        data_format = 'NHWC'
-    elif data_format == 'channels_first':
-        h = shape[2]
-        w = shape[3]
-        in_depth = shape[1]
-        data_format = 'NCHW'
-    
-    if filter_size[0] > h:
-        ksize[0] = h
-    if filter_size[1] > w:
-        ksize[1] = w
-
-    if out_depth is None:
-        out_depth = in_depth
-    
-    if weight_decay is None:
-        weight_decay = 0.
-    if kernel_initializer is None:
-        kernel_initializer = tf.contrib.layers.xavier_initializer()
-    if bias_initializer is None:
-        bias_initializer = tf.contrib.layers.xavier_initializer()
-
-    with tf.variable_scope(scope):
-
-        depthwise_filter = tf.get_variable("depthwise_weights",
-                                           [ksize[0], ksize[1], in_depth, ch_mult],
-                                           dtype=dtype,
-                                           initializer=kernel_initializer,
-                                           regularizer=tf.contrib.layers.l2_regularizer(weight_decay))
-
-        pointwise_filter = tf.get_variable("pointwise_weights",
-                                           [1, 1, in_depth*ch_mult, out_depth],
-                                           dtype=dtype,
-                                           initializer=kernel_initializer,
-                                           regularizer=tf.contrib.layers.l2_regularizer(weight_decay))
-
-        if repeat:
-            depthwise_filter_0 = tf.get_variable("depthwise_weights_0",
-                                                 [ksize[0], ksize[1], in_depth, ch_mult],
-                                                 dtype=dtype,
-                                                 initializer=kernel_initializer,
-                                                 regularizer=tf.contrib.layers.l2_regularizer(weight_decay))
-            inp = tf.nn.depthwise_conv2d(inp, depthwise_filter_0, strides=[1,1,1,1], padding='SAME', name="ds_conv0")
-            inp = intermediate_activation(inp)
-
-        inp = tf.nn.separable_conv2d(inp, depthwise_filter, pointwise_filter, strides=[1,1,1,1], padding='SAME', name="ds_conv")
-
-        if not bias:
-            return inp
-        else:
-            
-            bias = tf.get_variable("bias",
-                                   [out_depth],
-                                   dtype=dtype,
-                                   initializer=bias_initializer)
-            return inp + bias                    
-                        
-def drop_recurrent_step(hidden, keep_prob, is_training=True):
-
-    if is_training:
-        batch_size = tf.shape(hidden)[0]
-        noise_shape = [batch_size, 1, 1, 1]
-        random_tensor = keep_prob        
-        random_tensor += tf.random_uniform(shape=noise_shape, dtype=tf.float32)
-        binary_tensor = tf.floor(random_tensor)
-        hidden = tf.div(hidden, keep_prob) * binary_tensor
-    return hidden
-
-
+        #     raise ValueError('Output not initialized yet')
