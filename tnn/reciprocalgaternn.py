@@ -363,7 +363,7 @@ class ReciprocalGateCell(ConvRNNCell):
                                         dtype=dtype,
                                         initializer=bias_initializer)
 
-                out = out + bias_term                   
+                    out = out + bias_term                   
                      
             return out       
 
