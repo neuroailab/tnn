@@ -35,7 +35,16 @@ def _get_func_from_kwargs(function, **kwargs):
                         try:
                             f = getattr(tf, function)
                         except:
-                            f = getattr(tf.contrib.layers, function)
+                            try:
+                                f = getattr(tf.contrib.layers, function)
+                            except:
+                                try:
+                                    f = getattr(tflearn.layers.conv, function)
+                                except:
+                                    f = getattr(tflearn.layers.core, function)
+
+
+
     return f, kwargs
 
 

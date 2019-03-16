@@ -1140,7 +1140,11 @@ class GenFuncCell(RNNCell):
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
                 
-            output = self.harbor[0](inputs, self.harbor_shape, self.name_tmp, reuse=self._reuse, **self.harbor[1])
+            bypass_harbor = self.memory[1].get('bypass_harbor', False)
+            if bypass_harbor:
+                output = inputs
+            else:
+                output = self.harbor[0](inputs, self.harbor_shape, self.name_tmp, reuse=self._reuse, **self.harbor[1])
 
             res_input = None
             curr_time_suffix = 't' + str(self.internal_time)
