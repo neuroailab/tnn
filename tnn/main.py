@@ -13,10 +13,19 @@ import tfutils.model
 import tnn.cell
 import tflearn
 
+def _cast_unicode_to_str(function, kwargs):
+    if function in ['conv_2d', 'conv_2d_transpose', 'fully_connected']: # tflearn functions
+        for k in kwargs.keys():
+            v = kwargs[k]
+            if k != 'function' and isinstance(v, unicode):
+                kwargs[k] = str(v)
+    return kwargs
+
 def _get_func_from_kwargs(function, **kwargs):
     """
     Guess the function from its name
     """
+    kwargs = _cast_unicode_to_str(function, kwargs)
     if (function is None) or callable(function):
         f = function
     else:
@@ -36,14 +45,12 @@ def _get_func_from_kwargs(function, **kwargs):
                             f = getattr(tf, function)
                         except:
                             try:
-                                f = getattr(tf.contrib.layers, function)
+                                f = getattr(tflearn.layers.conv, function)
                             except:
                                 try:
-                                    f = getattr(tflearn.layers.conv, function)
-                                except:
                                     f = getattr(tflearn.layers.core, function)
-
-
+                                except:
+                                    f = getattr(tf.contrib.layers, function)
 
     return f, kwargs
 
