@@ -11,7 +11,7 @@ import numpy as np
 
 import tfutils.model
 import tnn.cell
-
+import tflearn
 
 def _get_func_from_kwargs(function, **kwargs):
     """
