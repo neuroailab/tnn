@@ -99,8 +99,8 @@ class ReciprocalGateCell(ConvRNNCell):
                  batch_norm_cell_out=False,
                  batch_norm_decay=0.9,
                  batch_norm_epsilon=1e-5,
-                 gate_tau_bn_gamma_init=None,
-                 edges_init_zero=False,
+                 gate_tau_bn_gamma_init=0.1,
+                 edges_init_zero=None,
                  is_training=False):
         """ 
         Initialize the memory function of the ReciprocalGateCell.
@@ -234,7 +234,14 @@ class ReciprocalGateCell(ConvRNNCell):
         self._batch_norm_epsilon = batch_norm_epsilon
         self._is_training = is_training
         self._gate_tau_bn_gamma_init = gate_tau_bn_gamma_init
-        self._edges_init_zero = edges_init_zero
+
+        if edges_init_zero is None:
+            if (self._feedback_activation is None) or (self._feedback_activation == tf.identity):
+                self._edges_init_zero = True
+            else:
+                self._edges_init_zero = False
+        else:
+            self._edges_init_zero = edges_init_zero
 
     def state_size(self):
         return {'cell':self._cell_size, 'out':self._size}
