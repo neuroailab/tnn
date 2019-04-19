@@ -1182,7 +1182,7 @@ def shared_xy_graph_conv(inp,
     print("node output shape", out.shape.as_list())
     return out
     
-class GenFuncCell(RNNCell):
+xclass GenFuncCell(RNNCell):
 
     def __init__(self,
                  harbor_shape,
