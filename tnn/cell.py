@@ -1059,6 +1059,124 @@ def factored_fc(inp,
 
     #print(output.name, output.shape)
     return output
+
+def shared_spatial_mlp(inp,
+                        out_depth,
+                        scope="shared_spatial_mlp",
+                        hidden_dims=[],
+                        bias=0.0,
+                        activation=tf.nn.elu,
+                        kernel_initializer=tf.contrib.layers.xavier_initializer,
+                        kernel_init_kwargs=None):
+    '''
+    Applies same mlp to every every spatial feature
+    '''
+    
+    if kernel_init_kwargs is None:
+        kernel_init_kwargs = {}
+    if activation is None:
+        activation = tf.identity
+
+    assert len(inp.shape.as_list()) == 3
+    B,N,F = inp.shape.as_list()
+    output = tf.reshape(inp, [B*N, F], name="reshape")
+    input_dim = output.shape.as_list()[1]
+    mlp_dims = hidden_dims + [out_depth]
+
+    with tf.variable_scope(scope):
+        dim_now = input_dim
+        num_layers = len(mlp_dims)
+        for i, hidden_dim in enumerate(mlp_dims):
+
+            kernel_init = kernel_initializer(**kernel_init_kwargs)
+            bias_init = tf.constant_initializer(value=bias)            
+            kernel = tf.get_variable(initializer=kernel_init,
+                                     shape=[dim_now, hidden_dim],
+                                     dtype=tf.float32,
+                                     name=("layer_"+str(i+1)+"_weights"))
+            
+            biases = tf.get_variable(initializer=bias_init,
+                                     shape=[hidden_dim],
+                                     dtype=tf.float32,
+                                     name=("layer_"+str(i+1)+"_bias"))
+
+            # ops
+            output = tf.matmul(output, kernel)
+            output = tf.nn.bias_add(output, biases)
+            if i+1 != num_layers:
+                output = activation(output, name=("layer_"+str(i+1)+"_output"))
+                dim_now = output.shape.as_list()[1]
+            else:
+                output = tf.identity(output, name="mlp_output_batch")
+
+    output = tf.reshape(output, [B,N,out_depth], name="mlp_output")
+
+    return output
+
+
+def shared_xy_graph_conv(inp,
+                         num_out_attrs,
+                         kernel_size=[1,1],
+                         node_multiplier=1,
+                         kernel_init='xavier',
+                         kernel_init_kwargs={},
+                         mlp_kwargs={'hidden_dims': [256]},
+                         bias=0.0,
+                         scale=0.0,
+                         reshape_output=True
+):
+    '''
+    Learns X, Y linear functions of grid position and spatially shared mappings from features to node attrs
+    '''
+
+    B,H,W,C = inp.shape.as_list()
+    try:
+        init = tfutils.model.initializer(kind='constant', value=scale)        
+        bias_init = tfutils.model.initializer(kind='constant', value=bias)
+    except:
+        init = tfutils.model_tool_old.initializer(kind='constant', value=scale)                
+        bias_init = tfutils.model_tool_old.initializer(kind='constant', value=bias)
+    
+    # X,Y coordinate functions
+    ones = tf.ones(shape=[1,H,W], dtype=tf.float32)
+    hw_grid = tf.stack([tf.reshape(tf.range(W, dtype=tf.float32), [1,1,W]) * ones,
+                        tf.reshape(tf.range(H, dtype=tf.float32), [1,H,1]) * ones],
+                       axis=-1) # [1,H,W,2] channels will be mapped to x,y
+
+    coordinate_filter = tf.get_variable("xy_filter",
+                                        shape=[1,1,2,1],
+                                        dtype=tf.float32,
+                                        initializer=init
+    )
+    coordinate_filter *= tf.reshape(tf.constant([1.0, -1.0], dtype=tf.float32), [1,1,2,1])
+    coordinate_bias = tf.get_variable("xy_bias",
+                                      shape=[1,1,1,2],
+                                      dtype=tf.float32,
+                                      initializer=bias_init
+    )
+
+    xy_grid = tf.nn.depthwise_conv2d(hw_grid, coordinate_filter, strides=[1,1,1,1], padding='SAME', name='xy_linear')
+    xy_grid += coordinate_bias # [1,H,W,2] where first channel are X, second are Y
+
+    # graph conv where nodes are the spatial features of the input
+    out = tf.reshape(inp, [B, H*W, C])
+    out = shared_spatial_mlp(out,
+                             out_depth=(num_out_attrs*node_multiplier),
+                             **mlp_kwargs
+    )
+    out = tf.reshape(out, [B,H,W, num_out_attrs, node_multiplier])
+    # add coordinates to MLP outputs
+    # out = tf.expand_dims(tf.concat([xy_grid, tf.zeros([1,H,W,num_out_attrs-2], dtype=tf.float32)], axis=3), -1) # [B,H,W,num_out_attrs,node_multiplier]
+    # out *= tf.ones([B,H,W,num_out_attrs, node_multiplier], dtype=tf.float32)
+    out += tf.expand_dims(tf.concat([xy_grid, tf.zeros([1,H,W,num_out_attrs-2], dtype=tf.float32)], axis=3), -1) # [B,H,W,num_out_attrs,node_multiplier]
+
+    # reshape to 4-tensor with spatial dimensions combined
+    out = tf.transpose(out, [0,1,2,4,3]) # [B,H,W,M,num_out_attrs]
+    if reshape_output:
+        out = tf.reshape(out, [B, 1, H*W*node_multiplier, num_out_attrs])
+
+    print("node output shape", out.shape.as_list())
+    return out
     
 class GenFuncCell(RNNCell):
 
