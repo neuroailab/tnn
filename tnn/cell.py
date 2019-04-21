@@ -956,6 +956,8 @@ def factored_fc(inp,
                 spatial_mask_init_kwargs=None,
                 feature_kernel_init='xavier',
                 feature_kernel_init_kwargs=None,
+                kernel_init=None,
+                kernel_init_kwargs=None,
                 bias=1.0,
                 spatial_reg_scales=None,
                 feature_reg_scales=None,
@@ -1135,17 +1137,17 @@ def shared_xy_graph_conv(inp,
     print("inp shape", inp.shape.as_list())
     B,H,W,C = inp.shape.as_list()
     try:
-        init = tfutils.model.initializer(kind='constant', value=scale)        
+        init = tfutils.model.initializer(kind='constant', value=bias)        
         bias_init = tfutils.model.initializer(kind='constant', value=bias)
     except:
-        init = tfutils.model_tool_old.initializer(kind='constant', value=scale)                
+        init = tfutils.model_tool_old.initializer(kind='constant', value=bias)                
         bias_init = tfutils.model_tool_old.initializer(kind='constant', value=bias)
     
     # X,Y coordinate functions
     ones = tf.ones(shape=[1,H,W], dtype=tf.float32)
-    hw_grid = tf.stack([tf.reshape(tf.range(W, dtype=tf.float32), [1,1,W]) * ones,
-                        tf.reshape(tf.range(H, dtype=tf.float32), [1,H,1]) * ones],
-                       axis=-1) # [1,H,W,2] channels will be mapped to x,y
+    hw_grid = scale * tf.stack([tf.reshape(tf.range(W, dtype=tf.float32), [1,1,W]) * ones,
+                                tf.reshape(tf.range(H, dtype=tf.float32), [1,H,1]) * ones],
+                               axis=-1) # [1,H,W,2] channels will be mapped to x,y
 
     coordinate_filter = tf.get_variable("xy_filter",
                                         shape=[1,1,2,1],
