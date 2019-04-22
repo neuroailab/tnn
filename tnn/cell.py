@@ -957,7 +957,7 @@ def factored_fc(inp,
                 feature_kernel_init='xavier',
                 feature_kernel_init_kwargs=None,
                 kernel_init=None,
-                kernel_init_kwargs=None,
+                kernel_init_kwargs={},
                 bias=1.0,
                 spatial_reg_scales=None,
                 feature_reg_scales=None,
@@ -985,11 +985,16 @@ def factored_fc(inp,
     spatial_mask_init, feature_kernel_init: in ['xavier', 'zeros', 'constant', etc.]
     spatial_mask_init_kwargs, feature_kernel_init_kwargs: kwargs to pass to tfutils.model.initializer, e.g. 'value' for a constant init
     bias: float value for constant bias initializer
-    '''    
+    '''
     if spatial_mask_init_kwargs is None:
         spatial_mask_init_kwargs = {}
     if feature_kernel_init_kwargs is None:
         feature_kernel_init_kwargs = {}
+    if kernel_init is not None:
+        spatial_mask_init = kernel_init
+        spatial_mask_init_kwargs = copy.deepcopy(kernel_init_kwargs)
+        feature_kernel_init = kernel_init
+        feature_kernel_init_kwargs = copy.deepcopy(kernel_init_kwargs)
 
     # spatial dimensions of input layer, H x W x D
     in_shape = inp.get_shape().as_list()[1:4]
