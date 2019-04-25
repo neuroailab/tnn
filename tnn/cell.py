@@ -616,7 +616,14 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
-def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], padding='SAME', batch_norm=False, is_training=False, init_zero=None, batch_norm_decay=0.999, batch_norm_epsilon=1e-3, sp_resize=True):
+def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
+                 padding='SAME', batch_norm=False, is_training=False, init_zero=None, 
+                 batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True, time_sep=False, time_suffix=None):
+
+    
+    if time_sep:
+        assert time_suffix is not None
+
     if kernel_init_kwargs is None:
         kernel_init_kwargs = {}
     
@@ -642,7 +649,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           epsilon=batch_norm_epsilon, 
                                                           init_zero=init_zero, 
                                                           activation=None, 
-                                                          data_format='channels_last')
+                                                          data_format='channels_last',
+                                                          time_suffix=time_suffix)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
                                                           is_training=is_training, 
@@ -650,7 +658,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           epsilon=batch_norm_epsilon, 
                                                           init_zero=init_zero, 
                                                           activation=None, 
-                                                          data_format='channels_last')
+                                                          data_format='channels_last',
+                                                          time_suffix=time_suffix)
         return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
         if sp_resize: # usually do this if strides are kept to 1 always
@@ -672,7 +681,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           epsilon=batch_norm_epsilon, 
                                                           init_zero=init_zero, 
                                                           activation=None, 
-                                                          data_format='channels_last')
+                                                          data_format='channels_last',
+                                                          time_suffix=time_suffix)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
                                                           is_training=is_training, 
@@ -680,7 +690,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           epsilon=batch_norm_epsilon, 
                                                           init_zero=init_zero, 
                                                           activation=None, 
-                                                          data_format='channels_last')
+                                                          data_format='channels_last',
+                                                          time_suffix=time_suffix)
         return tf.add(inp, projection_out)
     
 def component_conv(inp,
@@ -699,10 +710,12 @@ def component_conv(inp,
          activation=None,
          batch_norm=False,
          is_training=False,
-         batch_norm_decay=0.999,
-         batch_norm_epsilon=1e-3,
+         batch_norm_decay=0.9,
+         batch_norm_epsilon=1e-5,
          init_zero=None,
          return_input=False,
+         time_sep=False,
+         time_suffix=None,
          name='component_conv'
          ):
 
@@ -712,6 +725,9 @@ the name of its feedforward input. This is useful when loading basenet weights i
 harbor channel op of concat. Other channel ops should work with tfutils.model.conv just fine.
     """
     
+    if time_sep:
+        assert time_suffix is not None
+
     assert input_name is not None
     # assert out_shape is not None
     if weight_decay is None:
@@ -779,7 +795,8 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               decay = batch_norm_decay, 
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
-                                              activation=activation)
+                                              activation=activation,
+                                              time_suffix=time_suffix)
         except:
             output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
                                               is_training=is_training, 
@@ -787,7 +804,8 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               decay = batch_norm_decay, 
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
-                                              activation=activation)
+                                              activation=activation,
+                                              time_suffix=time_suffix)
 
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
@@ -1217,6 +1235,8 @@ class GenFuncCell(RNNCell):
 
         self._reuse = None
 
+        self.internal_time = 0
+
     def __call__(self, inputs=None, state=None):
         """
         Produce outputs given inputs
@@ -1252,9 +1272,13 @@ class GenFuncCell(RNNCell):
             output = self.harbor[0](inputs, self.harbor_shape, self.name_tmp, reuse=self._reuse, **self.harbor[1])
 
             res_input = None
+            curr_time_suffix = 't' + str(self.internal_time)
             pre_name_counter = 0
             for function, kwargs in self.pre_memory:
                 with tf.variable_scope("pre_" + str(pre_name_counter), reuse=self._reuse):
+                    if kwargs.get('time_sep', False):
+                        kwargs['time_suffix'] = curr_time_suffix # used for scoping in the op
+
                     if function.__name__ == "component_conv":
                         if kwargs.get('return_input', False):
                             output, res_input = function(output, inputs, **kwargs) # component_conv needs to know the inputs
@@ -1280,6 +1304,9 @@ class GenFuncCell(RNNCell):
                                            dtype=self.dtype_tmp,
                                            **self.state_init[1])
 
+                if mem_kwargs.get('time_sep', False):
+                    mem_kwargs['time_suffix'] = curr_time_suffix # used for scoping in the op
+
                 state = self.memory[0](output, state, **mem_kwargs)
                 self.state = tf.identity(state, name='state')
 
@@ -1290,6 +1317,9 @@ class GenFuncCell(RNNCell):
             post_name_counter = 0
             for function, kwargs in self.post_memory:
                 with tf.variable_scope("post_" + str(post_name_counter), reuse=self._reuse):
+                    if kwargs.get('time_sep', False):
+                        kwargs['time_suffix'] = curr_time_suffix # used for scoping in the op
+
                     if function.__name__ == "component_conv":
                         output = function(output, inputs, **kwargs)
                     elif function.__name__ == "residual_add":
@@ -1301,6 +1331,9 @@ class GenFuncCell(RNNCell):
             # scope.reuse_variables()
             self._reuse = True
         self.output_shape_tmp = self.output_tmp.shape
+
+        self.internal_time = self.internal_time + 1
+
         return self.output_tmp, self.state
 
     @property
