@@ -1190,38 +1190,39 @@ def shared_xy_graph_conv(inp,
 
     # larger spatial scale coordinate learning
     if xy_ksize > 1:
-        xfilter = tf.get_variable("x_filter", shape=[1,xy_ksize,C,1], dtype=tf.float32, initializer=init)
-        yfilter = tf.get_variable("y_filter", shape=[xy_ksize,1,C,1], dtype=tf.float32, initializer=init)
+        xfilter = tf.get_variable("x_filter", shape=[1,xy_ksize,C,2], dtype=tf.float32, initializer=init)
+        yfilter = tf.get_variable("y_filter", shape=[xy_ksize,1,C,2], dtype=tf.float32, initializer=init)
 
-        dx = tf.nn.conv2d(inp, xfilter, strides=[1,S,S,1], padding='SAME') # [B,H//S,W//S,1]
-        dy = tf.nn.conv2d(inp, yfilter, strides=[1,S,S,1], padding='SAME') # [B,H//S,W//S,1]
-
+        dx, dzx = tf.split(tf.nn.conv2d(inp, xfilter, strides=[1,S,S,1], padding='SAME'), [1,1], axis=-1) # [B,H//S,W//S,2]
+        dy, dzy = tf.split(tf.nn.conv2d(inp, yfilter, strides=[1,S,S,1], padding='SAME'), [1,1], axis=-1) # [B,H//S,W//S,2]
+        dz = dzx + dzy
+        
         xy_grid += tf.concat([dx,dy], axis=3)
+    else:
+        xy_grid = tf.tile(xy_grid, [B,1,1,1])
+        dz = tf.zeros([B,H//S,W//S,1], dtype=tf.float32)
     
     # graph conv where nodes are the spatial features of the input
     if S > 1:
-        out = tf.nn.avg_pool(inp, ksize=[1,S,S,1], strides=[1,S,S,1], padding='SAME', name="avg_pool")
-        print("out shape after pooling", out.shape.as_list())
+        downsample_kernel = tf.get_variable("downsample_kernel", shape=[S,S,C,1], dtype=tf.float32, initializer=init)
+        out = tf.nn.depthwise_conv2d(inp, downsample_kernel, strides=[1,S,S,1], padding='SAME', name="downsample_conv")
         out = tf.reshape(out, [B, (H*W) // (S**2), C])
-        import pdb
-        pdb.set_trace()
     else:
         out = tf.reshape(inp, [B, H*W, C])
-        
+
     out = shared_spatial_mlp(out,
                              out_depth=(num_out_attrs*node_multiplier),
                              **mlp_kwargs
     )
-    out = tf.reshape(out, [B,H,W, num_out_attrs, node_multiplier])
+    out = tf.reshape(out, [B,H//S,W//S, num_out_attrs, node_multiplier])
+    
     # add coordinates to MLP outputs
-    # out = tf.expand_dims(tf.concat([xy_grid, tf.zeros([1,H,W,num_out_attrs-2], dtype=tf.float32)], axis=3), -1) # [B,H,W,num_out_attrs,node_multiplier]
-    # out *= tf.ones([B,H,W,num_out_attrs, node_multiplier], dtype=tf.float32)
-    out += tf.expand_dims(tf.concat([xy_grid, tf.zeros([1,H,W,num_out_attrs-2], dtype=tf.float32)], axis=3), -1) # [B,H,W,num_out_attrs,node_multiplier]
+    out += tf.expand_dims(tf.concat([xy_grid, dz, tf.zeros([B,H//S,W//S,num_out_attrs-3], dtype=tf.float32)], axis=3), -1) # [B,H,W,num_out_attrs,node_multiplier]
 
     # reshape to 4-tensor with spatial dimensions combined
-    out = tf.transpose(out, [0,1,2,4,3]) # [B,H,W,M,num_out_attrs]
+    out = tf.transpose(out, [0,1,2,4,3]) # [B,H//S,W//S,M,num_out_attrs]
     if reshape_output:
-        out = tf.reshape(out, [B, 1, H*W*node_multiplier, num_out_attrs])
+        out = tf.reshape(out, [B, 1, (H*W*node_multiplier) // (S**2), num_out_attrs])
 
     return out
     
