@@ -1157,7 +1157,6 @@ def shared_xy_graph_conv(inp,
     Learns X, Y linear functions of grid position and spatially shared mappings from features to node attrs
     '''
 
-    print("inp shape", inp.shape.as_list())
     B,H,W,C = inp.shape.as_list()
     try:
         init = tfutils.model.initializer(kind='constant', value=bias)        
@@ -1204,7 +1203,6 @@ def shared_xy_graph_conv(inp,
     if reshape_output:
         out = tf.reshape(out, [B, 1, H*W*node_multiplier, num_out_attrs])
 
-    print("node output shape", out.shape.as_list())
     return out
     
 class GenFuncCell(RNNCell):
