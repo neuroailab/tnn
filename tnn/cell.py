@@ -1144,7 +1144,8 @@ def shared_spatial_mlp(inp,
 
 def shared_xy_graph_conv(inp,
                          num_out_attrs,
-                         kernel_size=[1,1],
+                         xy_ksize=1,
+                         stride=1,
                          node_multiplier=1,
                          kernel_init='xavier',
                          kernel_init_kwargs={},
@@ -1158,6 +1159,7 @@ def shared_xy_graph_conv(inp,
     '''
 
     B,H,W,C = inp.shape.as_list()
+    S = stride
     try:
         init = tfutils.model.initializer(kind='constant', value=bias)        
         bias_init = tfutils.model.initializer(kind='constant', value=bias)
@@ -1183,11 +1185,29 @@ def shared_xy_graph_conv(inp,
                                       initializer=bias_init
     )
     
-    xy_grid = tf.nn.depthwise_conv2d(hw_grid, coordinate_filter, strides=[1,1,1,1], padding='SAME', name='xy_linear')
-    xy_grid += coordinate_bias # [1,H,W,2] where first channel are X, second are Y
+    xy_grid = tf.nn.depthwise_conv2d(hw_grid, coordinate_filter, strides=[1,S,S,1], padding='SAME', name='xy_linear')
+    xy_grid += coordinate_bias # [1,H//S,W//S,2] where first channel are X, second are Y
 
+    # larger spatial scale coordinate learning
+    if xy_ksize > 1:
+        xfilter = tf.get_variable("x_filter", shape=[1,xy_ksize,C,1], dtype=tf.float32, initializer=init)
+        yfilter = tf.get_variable("y_filter", shape=[xy_ksize,1,C,1], dtype=tf.float32, initializer=init)
+
+        dx = tf.nn.conv2d(inp, xfilter, strides=[1,S,S,1], padding='SAME') # [B,H//S,W//S,1]
+        dy = tf.nn.conv2d(inp, yfilter, strides=[1,S,S,1], padding='SAME') # [B,H//S,W//S,1]
+
+        xy_grid += tf.concat([dx,dy], axis=3)
+    
     # graph conv where nodes are the spatial features of the input
-    out = tf.reshape(inp, [B, H*W, C])
+    if S > 1:
+        out = tf.nn.avg_pool(inp, ksize=[1,S,S,1], strides=[1,S,S,1], padding='SAME', name="avg_pool")
+        print("out shape after pooling", out.shape.as_list())
+        out = tf.reshape(out, [B, (H*W) // (S**2), C])
+        import pdb
+        pdb.set_trace()
+    else:
+        out = tf.reshape(inp, [B, H*W, C])
+        
     out = shared_spatial_mlp(out,
                              out_depth=(num_out_attrs*node_multiplier),
                              **mlp_kwargs
