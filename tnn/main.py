@@ -204,7 +204,7 @@ def unroll(G, input_seq, ntimes=None):
     for inp, out in inp_out:
         paths.extend([p for p in nx.all_simple_paths(G, inp, out)])
 
-    path_lengths = map(len, paths)
+    path_lengths = list(map(len, paths))
     longest_path_len = max(path_lengths) if path_lengths else 0
 
     if ntimes is None:
@@ -250,7 +250,7 @@ def unroll(G, input_seq, ntimes=None):
             attr['states'].append(state)
 
 def topological_sort(G, ff_order, paths, node_attr):
-    path_lengths = map(len, paths)
+    path_lengths = list(map(len, paths))
     longest_path_len = max(path_lengths) if path_lengths else 0
 
     try:
@@ -341,7 +341,7 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
     for inp, out in inp_out:
         paths.extend([p for p in nx.all_simple_paths(G, inp, out)])
 
-    path_lengths = map(len, paths)
+    path_lengths = list(map(len, paths))
     longest_path_len = max(path_lengths) if path_lengths else 0
 
     if ntimes is None:
