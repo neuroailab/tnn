@@ -1144,7 +1144,8 @@ def shared_spatial_mlp(inp,
 
 def shared_xy_graph_conv(inp,
                          num_out_attrs,
-                         kernel_size=[1,1],
+                         xy_ksize=1,
+                         stride=1,
                          node_multiplier=1,
                          kernel_init='xavier',
                          kernel_init_kwargs={},
@@ -1157,8 +1158,8 @@ def shared_xy_graph_conv(inp,
     Learns X, Y linear functions of grid position and spatially shared mappings from features to node attrs
     '''
 
-    print("inp shape", inp.shape.as_list())
     B,H,W,C = inp.shape.as_list()
+    S = stride
     try:
         init = tfutils.model.initializer(kind='constant', value=bias)        
         bias_init = tfutils.model.initializer(kind='constant', value=bias)
@@ -1184,27 +1185,45 @@ def shared_xy_graph_conv(inp,
                                       initializer=bias_init
     )
     
-    xy_grid = tf.nn.depthwise_conv2d(hw_grid, coordinate_filter, strides=[1,1,1,1], padding='SAME', name='xy_linear')
-    xy_grid += coordinate_bias # [1,H,W,2] where first channel are X, second are Y
+    xy_grid = tf.nn.depthwise_conv2d(hw_grid, coordinate_filter, strides=[1,S,S,1], padding='SAME', name='xy_linear')
+    xy_grid += coordinate_bias # [1,H//S,W//S,2] where first channel are X, second are Y
 
+    # larger spatial scale coordinate learning
+    if xy_ksize > 1:
+        xfilter = tf.get_variable("x_filter", shape=[1,xy_ksize,C,2], dtype=tf.float32, initializer=init)
+        yfilter = tf.get_variable("y_filter", shape=[xy_ksize,1,C,2], dtype=tf.float32, initializer=init)
+
+        dx, dzx = tf.split(tf.nn.conv2d(inp, xfilter, strides=[1,S,S,1], padding='SAME'), [1,1], axis=-1) # [B,H//S,W//S,2]
+        dy, dzy = tf.split(tf.nn.conv2d(inp, yfilter, strides=[1,S,S,1], padding='SAME'), [1,1], axis=-1) # [B,H//S,W//S,2]
+        dz = dzx + dzy
+        
+        xy_grid += tf.concat([dx,dy], axis=3)
+    else:
+        xy_grid = tf.tile(xy_grid, [B,1,1,1])
+        dz = tf.zeros([B,H//S,W//S,1], dtype=tf.float32)
+    
     # graph conv where nodes are the spatial features of the input
-    out = tf.reshape(inp, [B, H*W, C])
+    if S > 1:
+        downsample_kernel = tf.get_variable("downsample_kernel", shape=[S,S,C,1], dtype=tf.float32, initializer=init)
+        out = tf.nn.depthwise_conv2d(inp, downsample_kernel, strides=[1,S,S,1], padding='SAME', name="downsample_conv")
+        out = tf.reshape(out, [B, (H*W) // (S**2), C])
+    else:
+        out = tf.reshape(inp, [B, H*W, C])
+
     out = shared_spatial_mlp(out,
                              out_depth=(num_out_attrs*node_multiplier),
                              **mlp_kwargs
     )
-    out = tf.reshape(out, [B,H,W, num_out_attrs, node_multiplier])
+    out = tf.reshape(out, [B,H//S,W//S, num_out_attrs, node_multiplier])
+    
     # add coordinates to MLP outputs
-    # out = tf.expand_dims(tf.concat([xy_grid, tf.zeros([1,H,W,num_out_attrs-2], dtype=tf.float32)], axis=3), -1) # [B,H,W,num_out_attrs,node_multiplier]
-    # out *= tf.ones([B,H,W,num_out_attrs, node_multiplier], dtype=tf.float32)
-    out += tf.expand_dims(tf.concat([xy_grid, tf.zeros([1,H,W,num_out_attrs-2], dtype=tf.float32)], axis=3), -1) # [B,H,W,num_out_attrs,node_multiplier]
+    out += tf.expand_dims(tf.concat([xy_grid, dz, tf.zeros([B,H//S,W//S,num_out_attrs-3], dtype=tf.float32)], axis=3), -1) # [B,H,W,num_out_attrs,node_multiplier]
 
     # reshape to 4-tensor with spatial dimensions combined
-    out = tf.transpose(out, [0,1,2,4,3]) # [B,H,W,M,num_out_attrs]
+    out = tf.transpose(out, [0,1,2,4,3]) # [B,H//S,W//S,M,num_out_attrs]
     if reshape_output:
-        out = tf.reshape(out, [B, 1, H*W*node_multiplier, num_out_attrs])
+        out = tf.reshape(out, [B, 1, (H*W*node_multiplier) // (S**2), num_out_attrs])
 
-    print("node output shape", out.shape.as_list())
     return out
     
 class GenFuncCell(RNNCell):
