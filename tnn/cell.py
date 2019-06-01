@@ -598,7 +598,6 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V
 
     return output
 
-
 def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     """
     Memory that decays over time
@@ -617,7 +616,7 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     return state
 
 def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
-                 padding='SAME', batch_norm=False, is_training=False, init_zero=None, 
+                 padding='SAME', batch_norm=False, group_norm=False, num_groups=32, is_training=False, init_zero=None, 
                  batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True, time_sep=False, time_suffix=None):
 
     
@@ -660,6 +659,14 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           activation=None, 
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix)
+        elif group_norm:
+            projection_out = tfutils.model_tool_old.groupnorm(
+                inputs=projection_out,
+                G=num_groups,
+                data_format='channels_last',
+                epsilon=batch_norm_epsilon)
+
+            
         return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
         if sp_resize: # usually do this if strides are kept to 1 always
@@ -692,6 +699,14 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           activation=None, 
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix)
+
+        elif group_norm:
+            projection_out = tfutils.model_tool_old.groupnorm(
+                inputs=projection_out,
+                G=num_groups,
+                data_format='channels_last',
+                epsilon=batch_norm_epsilon)
+            
         return tf.add(inp, projection_out)
     
 def component_conv(inp,
@@ -707,8 +722,10 @@ def component_conv(inp,
          use_bias=True,
          bias=0,
          weight_decay=None,
-         activation=None,
-         batch_norm=False,
+                   activation=None,
+                   batch_norm=False,
+                   group_norm=False,
+                   num_groups=32,
          is_training=False,
          batch_norm_decay=0.9,
          batch_norm_epsilon=1e-5,
@@ -806,6 +823,14 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               init_zero=init_zero, 
                                               activation=activation,
                                               time_suffix=time_suffix)
+    elif group_norm:
+        output = tfutils.model_tool_old.groupnorm(
+            inputs=output,
+            G=num_groups,
+            data_format=data_format,
+            epsilon=batch_norm_epsilon,
+            weight_decay=weight_decay)
+            
 
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
