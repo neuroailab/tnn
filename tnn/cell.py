@@ -13,6 +13,7 @@ from tensorflow.contrib.rnn import RNNCell
 from tensorflow.python.framework import ops
 import tnn.spatial_transformer
 import tfutils.model
+from tfutils.model_tool_old import conv, fc
 import copy
 
 def laplacian_regularizer(scale, scope=None):
@@ -1250,6 +1251,32 @@ def shared_xy_graph_conv(inp,
         out = tf.reshape(out, [B, 1, (H*W*node_multiplier) // (S**2), num_out_attrs])
 
     return out
+
+def squeeze_and_excitation(inputs,
+                           reduction_ratio=0.25,
+                           activation=tf.nn.relu,
+                           kernel_init="variance_scaling",
+                           kernel_init_kwargs={'seed':0}):
+    '''
+    Squeeze and Excitation Layer
+    
+    inputs: [B,H,W,C] conv2d tensor with channels last
+    reduction_ratio: float in [0,1] to determine how much to squeeze channels
+    activation: nonlinear function to apply after reduction conv
+    '''
+    B,H,W,C = inputs.shape.as_list()
+    rC = max(1, int(C * reduction_ratio))
+
+    se_tensor = tf.reduce_mean(inputs, axis=[1,2], keepdims=True) # [B,1,1,C]
+    with tf.variable_scope("se_reduce"):
+        se_tensor = conv(se_tensor, rC, ksize=[1,1], use_bias=True, activation=activation, kernel_init=kernel_init, kernel_init_kwargs=kernel_init_kwargs)
+    with tf.variable_scope("se_expand"):
+        se_tensor = conv(se_tensor, C, ksize=[1,1], use_bias=True, activation=None, kernel_init=kernel_init, kernel_init_kwargs=kernel_init_kwargs)
+
+    print("squeeze-excitation with %d to %d channels" % (C, rC))
+    import pdb
+    pdb.set_trace()
+    return tf.nn.sigmoid(se_tensor) * inputs
     
 class GenFuncCell(RNNCell):
 
