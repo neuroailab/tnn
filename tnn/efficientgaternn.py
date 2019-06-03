@@ -142,14 +142,13 @@ class EfficientGateCell(ConvRNNCell):
 
         return out
     
-    def __call__(self, inputs, state, fb_input, res_input,
-                 time_sep=False, time_suffix=None, is_training=True, drop_connect_rate=0):
+    def __call__(self, inputs, state, fb_input, res_input, is_training=True, **training_kwargs):
+
         """
         """
         # update training-specific kwargs
-        self.bn_kwargs.update({'time_sep': time_sep, 'time_suffix': time_suffix,
-                               'is_training': is_training, 'drop_connect_rate': drop_connect_rate})
-            
+        self.bn_kwargs['is_training'] = is_training
+        self.bn_kwargs.update(training_kwargs)
 
         # get previous state
         prev_cell, prev_state = tf.split(value=state, num_or_size_splits=[self.cell_depth, self.out_depth], axis=3, name="state_split")
