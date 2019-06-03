@@ -550,7 +550,7 @@ class ReciprocalGateCell(ConvRNNCell):
         inp = self._apply_recurrent_dropout(inp)
         return inp
     
-    def __call__(self, inputs, state, fb_input, res_input, time_sep=False, time_suffix=None):
+    def __call__(self, inputs, state, fb_input, res_input, time_sep=False, time_suffix=None, **training_kwargs):
         """
         Produce outputs of RecipCell, given inputs and previous state {'cell':cell_state, 'out':out_state}
 
