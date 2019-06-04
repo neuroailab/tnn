@@ -556,9 +556,10 @@ class ReciprocalGateCell(ConvRNNCell):
 
         inputs: dict w keys ('ff', 'fb'). ff and fb inputs must have the same shape. 
         """
-
+        self._is_training = training_kwargs.get('is_training', self._is_training)
         if time_sep:
             assert time_suffix is not None
+            # print("time suffix, training?", time_suffix, self._is_training)
             
         dtype = inputs.dtype
 
