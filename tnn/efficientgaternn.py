@@ -73,7 +73,8 @@ class EfficientGateCell(ConvRNNCell):
                  group_norm=False,
                  num_groups=32,
                  strides=1,
-                 se_ratio=0
+                 se_ratio=0,
+                 residual_add=False
     ):
         """ 
         Initialize the memory function of the EfficientGateCell.
@@ -88,7 +89,8 @@ class EfficientGateCell(ConvRNNCell):
         self.in_depth = self.out_depth if in_depth is None else in_depth
         self.cell_depth = cell_depth
         self.strides = strides
-        
+        self.residual_add = residual_add
+
         # functions
         self._relu = activation
         self._se = tf.identity if not se_ratio \
@@ -149,9 +151,10 @@ class EfficientGateCell(ConvRNNCell):
         """
         # update training-specific kwargs
         self.bn_kwargs['is_training'] = is_training
-        # self.bn_kwargs.update(training_kwargs)
-        print("EGC bn kwargs", self.bn_kwargs)
-
+        self.bn_kwargs.update({'time_suffix': training_kwargs.get('time_suffix', None),
+                               'time_sep': training_kwargs.get('time_sep', True)}) # time suffix
+        print("bn kwargs", self.bn_kwargs)
+        
         # get previous state
         prev_cell, prev_state = tf.split(value=state, num_or_size_splits=[self.cell_depth, self.in_depth], axis=3, name="state_split")
 
@@ -167,6 +170,11 @@ class EfficientGateCell(ConvRNNCell):
                     next_out = self._drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])
                 print("residual adding", res_input.name, res_input.shape.as_list())
                 next_out = tf.add(next_out, res_input)
+            elif (res_input is not None) and self.residual_add: # add the matching channels
+                next_out, remainder = tf.split(next_out, [res_input.shape.as_list()[-1], -1], axis=-1)
+                next_out = tf.add(next_out, res_input)
+                next_out = tf.concat([next_out, remainder], axis=-1)
+                print("added matching channels", next_out.shape.as_list())                
 
             # update the state with a kxk depthwise conv/bn/relu
             update = self._conv_bn(inputs + prev_state, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
