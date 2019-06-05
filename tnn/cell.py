@@ -709,7 +709,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                 epsilon=batch_norm_epsilon)
             
         return tf.add(inp, projection_out)
-    
+
 def component_conv(inp,
          inputs_list,
          out_depth,
@@ -1251,6 +1251,23 @@ def shared_xy_graph_conv(inp,
         out = tf.reshape(out, [B, 1, (H*W*node_multiplier) // (S**2), num_out_attrs])
 
     return out
+
+def drop_connect(inputs, is_training, drop_connect_rate):
+    if (not is_training) or (not drop_connect_rate):
+        return inputs
+
+    print("applying drop connect with rate %.2f" % drop_connect_rate)
+    
+    # compute keep prob
+    keep_prob = 1.0 - drop_connect_rate
+
+    # compute drop_connect_tensor
+    batch_size = tf.shape(inputs)[0]
+    random_tensor = keep_prob
+    random_tensor = random_tensor + tf.random_uniform([batch_size, 1, 1, 1], dtype=inputs.dtype)
+    binary_tensor = tf.floor(random_tensor)
+    output = tf.div(inputs, keep_prob) * binary_tensor
+    return output
 
 def squeeze_and_excitation(inputs,
                            reduction_ratio=0.25,

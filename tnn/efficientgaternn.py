@@ -125,8 +125,6 @@ class EfficientGateCell(ConvRNNCell):
         """
         return tf.zeros([batch_size, self.shape[0], self.shape[1], self.cell_depth + self.in_depth], dtype=dtype)
 
-    def _drop_connect(self, inputs, is_training, drop_connect_rate):
-        raise NotImplementedError("Need to implement drop connect with variable rate")
 
     def _conv_bn(self, inputs, ksize, scope, out_depth=None, depthwise=False, activation=True):
         if out_depth is None:
@@ -161,21 +159,6 @@ class EfficientGateCell(ConvRNNCell):
         # updates
         with tf.variable_scope(type(self).__name__): # "EfficientGateCell"
 
-            # depthwise conv on expanded state, then squeeze-excitation, channel reduction, residual add
-            next_out = inputs + prev_state # add zeros at first timestep
-            next_out = self._se(next_out)
-            next_out = self._conv_bn(next_out, [1,1], out_depth=self.out_depth, depthwise=False, activation=False, scope="state_to_out")
-            if (res_input is not None) and (res_input.shape.as_list() == next_out.shape.as_list()):
-                if training_kwargs.get('drop_connect_rate', 0):
-                    next_out = self._drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])
-                print("residual adding", res_input.name, res_input.shape.as_list())
-                next_out = tf.add(next_out, res_input)
-            elif (res_input is not None) and self.residual_add: # add the matching channels
-                next_out, remainder = tf.split(next_out, [res_input.shape.as_list()[-1], -1], axis=-1)
-                next_out = tf.add(next_out, res_input)
-                next_out = tf.concat([next_out, remainder], axis=-1)
-                print("added matching channels", next_out.shape.as_list())                
-
             # update the state with a kxk depthwise conv/bn/relu
             update = self._conv_bn(inputs + prev_state, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
             next_state = prev_state + update
@@ -183,6 +166,20 @@ class EfficientGateCell(ConvRNNCell):
             # update the cell TODO
             next_cell = prev_cell
             
+            # depthwise conv on expanded state, then squeeze-excitation, channel reduction, residual add
+            next_out = self._se(next_state)
+            next_out = self._conv_bn(next_out, [1,1], out_depth=self.out_depth, depthwise=False, activation=False, scope="state_to_out")
+            if (res_input is not None) and (res_input.shape.as_list() == next_out.shape.as_list()):
+                next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])
+                print("drop connect/residual adding", drop_connect_rate, res_input.name, res_input.shape.as_list())
+                next_out = tf.add(next_out, res_input)
+            elif (res_input is not None) and self.residual_add: # add the matching channels
+                next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])                
+                next_out, remainder = tf.split(next_out, [res_input.shape.as_list()[-1], -1], axis=-1)
+                next_out = tf.add(next_out, res_input)
+                next_out = tf.concat([next_out, remainder], axis=-1)
+                print("added matching channels", next_out.shape.as_list())                
+
             # concat back on the cell
             next_state = tf.concat([next_cell, next_state], axis=3, name="cell_concat_next_state")
             
