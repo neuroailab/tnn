@@ -69,7 +69,7 @@ class EfficientGateCell(ConvRNNCell):
                  batch_norm=False,
                  batch_norm_decay=0.9,
                  batch_norm_epsilon=1e-5,
-                 batch_norm_gamma_init=0.1,
+                 batch_norm_gamma_init=1.0,
                  group_norm=False,
                  num_groups=32,
                  strides=1,
