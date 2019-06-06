@@ -63,8 +63,8 @@ class EfficientGateCell(ConvRNNCell):
                  feedback_filter_size=[1,1],
                  activation="swish",
                  gate_nonlinearity=tf.nn.sigmoid,
-                 kernel_initializer='variance_scaling',
-                 kernel_initializer_kwargs={'seed':0},
+                 kernel_initializer='normal',
+                 kernel_initializer_kwargs={},
                  weight_decay=None,
                  batch_norm=False,
                  batch_norm_decay=0.99,
@@ -134,14 +134,14 @@ class EfficientGateCell(ConvRNNCell):
         kwargs['ksize'] = ksize
         kwargs['activation'] = self._relu if activation else None
 
-        def _conv_op(x):
-            return depth_conv(x, **kwargs) if depthwise \
-                else conv(x, out_depth, **kwargs)
+        # def _conv_op(x):
+        #     return depth_conv(x, **kwargs) if depthwise \
+        #         else conv(x, out_depth, **kwargs)
         
-        with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
-            out = _conv_op(inputs)
+        with tf.variable_scope(scope):
+            inputs = depth_conv(inputs, **kwargs) if depthwise else conv(inputs, out_depth, **kwargs)
 
-        return out
+        return inputs
     
     def __call__(self, inputs, state, fb_input, res_input, is_training=True, **training_kwargs):
 
@@ -151,7 +151,7 @@ class EfficientGateCell(ConvRNNCell):
         self.bn_kwargs['is_training'] = is_training
         self.bn_kwargs.update({'time_suffix': training_kwargs.get('time_suffix', None),
                                'time_sep': training_kwargs.get('time_sep', True)}) # time suffix
-        print("bn kwargs", self.bn_kwargs)
+        # print("bn kwargs", self.bn_kwargs)
         
         # get previous state
         prev_cell, prev_state = tf.split(value=state, num_or_size_splits=[self.cell_depth, self.in_depth], axis=3, name="state_split")
