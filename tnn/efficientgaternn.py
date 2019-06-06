@@ -171,7 +171,7 @@ class EfficientGateCell(ConvRNNCell):
             next_out = self._conv_bn(next_out, [1,1], out_depth=self.out_depth, depthwise=False, activation=False, scope="state_to_out")
             if (res_input is not None) and (res_input.shape.as_list() == next_out.shape.as_list()):
                 next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])
-                print("drop connect/residual adding", drop_connect_rate, res_input.name, res_input.shape.as_list())
+                print("drop connect/residual adding", training_kwargs['drop_connect_rate'], res_input.name, res_input.shape.as_list())
                 next_out = tf.add(next_out, res_input)
             elif (res_input is not None) and self.residual_add: # add the matching channels
                 next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])                
