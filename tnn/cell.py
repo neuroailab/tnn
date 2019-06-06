@@ -716,6 +716,7 @@ def component_conv(inp,
          return_input=False,
          time_sep=False,
          time_suffix=None,
+         crossgpu_bn_kwargs={'use_crossgpu_bn': False},
          name='component_conv'
          ):
 
@@ -796,7 +797,8 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
                                               activation=activation,
-                                              time_suffix=time_suffix)
+                                              time_suffix=time_suffix,
+                                              **crossgpu_bn_kwargs)
         except:
             output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
                                               is_training=is_training, 
@@ -805,7 +807,8 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
                                               activation=activation,
-                                              time_suffix=time_suffix)
+                                              time_suffix=time_suffix,
+                                              **crossgpu_bn_kwargs)
 
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
@@ -832,6 +835,7 @@ def conv_bn(inp,
             batch_norm_decay=0.9,
             batch_norm_epsilon=1e-5,
             init_zero=None,
+            crossgpu_bn_kwargs={'use_crossgpu_bn': False},
             name='conv'):
 
     # assert out_shape is not None
@@ -879,7 +883,8 @@ def conv_bn(inp,
                                               decay = batch_norm_decay, 
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
-                                              activation=activation)
+                                              activation=activation,
+                                              **crossgpu_bn_kwargs)
         except:
             output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
                                               is_training=is_training, 
@@ -887,7 +892,8 @@ def conv_bn(inp,
                                               decay = batch_norm_decay, 
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
-                                              activation=activation)
+                                              activation=activation,
+                                              **crossgpu_bn_kwargs)
     
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
