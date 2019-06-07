@@ -617,7 +617,7 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     return state
 
 def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
-                 padding='SAME', batch_norm=False, is_training=False, init_zero=None, 
+                 padding='SAME', batch_norm=False, is_training=False, init_zero=None, crossgpu_bn_kwargs={'use_crossgpu_bn': False},
                  batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True, time_sep=False, time_suffix=None):
 
     
@@ -650,7 +650,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           init_zero=init_zero, 
                                                           activation=None, 
                                                           data_format='channels_last',
-                                                          time_suffix=time_suffix)
+                                                          time_suffix=time_suffix,
+                                                          **crossgpu_bn_kwargs)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
                                                           is_training=is_training, 
@@ -659,7 +660,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           init_zero=init_zero, 
                                                           activation=None, 
                                                           data_format='channels_last',
-                                                          time_suffix=time_suffix)
+                                                          time_suffix=time_suffix,
+                                                          **crossgpu_bn_kwargs)
         return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
         if sp_resize: # usually do this if strides are kept to 1 always
@@ -682,7 +684,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           init_zero=init_zero, 
                                                           activation=None, 
                                                           data_format='channels_last',
-                                                          time_suffix=time_suffix)
+                                                          time_suffix=time_suffix,
+                                                          **crossgpu_bn_kwargs)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
                                                           is_training=is_training, 
@@ -691,7 +694,9 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           init_zero=init_zero, 
                                                           activation=None, 
                                                           data_format='channels_last',
-                                                          time_suffix=time_suffix)
+                                                          time_suffix=time_suffix,
+                                                          **crossgpu_bn_kwargs)
+
         return tf.add(inp, projection_out)
     
 def component_conv(inp,
