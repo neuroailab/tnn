@@ -151,7 +151,7 @@ class EfficientGateCell(ConvRNNCell):
         self.bn_kwargs['is_training'] = is_training
         self.bn_kwargs.update({'time_suffix': training_kwargs.get('time_suffix', None),
                                'time_sep': training_kwargs.get('time_sep', True)}) # time suffix
-        # print("bn kwargs", self.bn_kwargs)
+        # print("bn kwargs", self.bn_kwargs['time_suffix'])
         
         # get previous state
         prev_cell, prev_state = tf.split(value=state, num_or_size_splits=[self.cell_depth, self.in_depth], axis=3, name="state_split")
