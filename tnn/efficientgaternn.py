@@ -93,9 +93,10 @@ class EfficientGateCell(ConvRNNCell):
 
         # functions
         self._relu = activation
+        self._se_ratio = se_ratio
         self._se = tf.identity if not se_ratio \
-                   else lambda x: squeeze_and_excitation(
-                           x, reduction_ratio=se_ratio, activation=self._relu,
+                   else lambda x, rC: squeeze_and_excitation(
+                           x, rC, activation=self._relu,
                            kernel_init=kernel_initializer,
                            kernel_init_kwargs=kernel_initializer_kwargs
                    )
@@ -151,6 +152,7 @@ class EfficientGateCell(ConvRNNCell):
         self.bn_kwargs['is_training'] = is_training
         self.bn_kwargs.update({'time_suffix': training_kwargs.get('time_suffix', None),
                                'time_sep': training_kwargs.get('time_sep', True)}) # time suffix
+        self.res_depth = res_input.shape.as_list()[-1] if res_input is not None else self.out_depth        
         # print("bn kwargs", self.bn_kwargs['time_suffix'])
         
         # get previous state
@@ -167,7 +169,7 @@ class EfficientGateCell(ConvRNNCell):
             next_cell = prev_cell
             
             # depthwise conv on expanded state, then squeeze-excitation, channel reduction, residual add
-            next_out = self._se(next_state)
+            next_out = self._se(next_state, self._se_ratio * self.res_depth)
             next_out = self._conv_bn(next_out, [1,1], out_depth=self.out_depth, depthwise=False, activation=False, scope="state_to_out")
             if (res_input is not None) and (res_input.shape.as_list() == next_out.shape.as_list()):
                 next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])

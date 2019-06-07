@@ -1272,7 +1272,7 @@ def drop_connect(inputs, is_training, drop_connect_rate):
     return output
 
 def squeeze_and_excitation(inputs,
-                           reduction_ratio=0.25,
+                           reduced_channels,
                            activation=tf.nn.relu,
                            kernel_init="variance_scaling",
                            kernel_init_kwargs={'seed':0}):
@@ -1284,7 +1284,7 @@ def squeeze_and_excitation(inputs,
     activation: nonlinear function to apply after reduction conv
     '''
     B,H,W,C = inputs.shape.as_list()
-    rC = max(1, int(C * reduction_ratio))
+    rC = max(1, int(reduced_channels))
 
     se_tensor = tf.reduce_mean(inputs, axis=[1,2], keepdims=True) # [B,1,1,C]
     with tf.variable_scope("se_reduce"):
