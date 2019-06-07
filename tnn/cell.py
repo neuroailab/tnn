@@ -628,7 +628,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
         kernel_init_kwargs = {}
     
     if inp.shape.as_list() == res_inp.shape.as_list():
-        if drop_connect_rate is not None:
+        if drop_connect_rate is not None and drop_connect_rate:
             inp = drop_connect(inp, is_training, drop_connect_rate)
         return tf.add(inp, res_inp, name="residual_sum")
     elif inp.shape.as_list()[:-1] == res_inp.shape.as_list()[:-1]:
