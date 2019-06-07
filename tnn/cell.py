@@ -616,7 +616,7 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
-def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
+def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
                  padding='SAME', batch_norm=False, group_norm=False, num_groups=32, is_training=False, init_zero=None, 
                  batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True, time_sep=False, time_suffix=None):
 
@@ -628,6 +628,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
         kernel_init_kwargs = {}
     
     if inp.shape.as_list() == res_inp.shape.as_list():
+        if drop_connect_rate is not None:
+            inp = drop_connect(inp, is_training, drop_connect_rate)
         return tf.add(inp, res_inp, name="residual_sum")
     elif inp.shape.as_list()[:-1] == res_inp.shape.as_list()[:-1]:
         # need to do a 1x1 conv to fix channels
