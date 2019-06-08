@@ -58,7 +58,8 @@ class EfficientGateCell(ConvRNNCell):
                  out_depth,
                  tau_filter_size,
                  in_depth=None,
-                 cell_depth=0,                 
+                 cell_depth=0,
+                 bypass_state=False,
                  gate_filter_size=[3,3],
                  feedback_filter_size=[1,1],
                  activation="swish",
@@ -88,6 +89,7 @@ class EfficientGateCell(ConvRNNCell):
         self.out_depth = out_depth
         self.in_depth = self.out_depth if in_depth is None else in_depth
         self.cell_depth = cell_depth
+        self.bypass_state = bypass_state
         self.strides = strides
         self.residual_add = residual_add
 
@@ -169,7 +171,9 @@ class EfficientGateCell(ConvRNNCell):
             next_cell = prev_cell
             
             # depthwise conv on expanded state, then squeeze-excitation, channel reduction, residual add
-            next_out = self._se(next_state, self._se_ratio * self.res_depth)
+            inp = next_state if not self.bypass_state else (inputs + prev_state)
+            print("bypassed state?", self.bypass_state)
+            next_out = self._se(inp, self._se_ratio * self.res_depth)
             next_out = self._conv_bn(next_out, [1,1], out_depth=self.out_depth, depthwise=False, activation=False, scope="state_to_out")
             if (res_input is not None) and (res_input.shape.as_list() == next_out.shape.as_list()):
                 next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])
