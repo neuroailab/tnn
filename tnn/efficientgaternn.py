@@ -163,8 +163,14 @@ class EfficientGateCell(ConvRNNCell):
         # updates
         with tf.variable_scope(type(self).__name__): # "EfficientGateCell"
 
+            update = tf.zeros_like(inputs)
+            # combine fb input with ff input
+            if fb_input is not None:
+                update += self._conv_bn(fb_input, self.feedback_filter_size, out_depth=self.in_depth, depthwise=False, activation=True, scope="feedback_to_state")
+                print("added feedback: %s of shape %s" % (fb_input.name, fb_input.shape.as_list()))
+
             # update the state with a kxk depthwise conv/bn/relu
-            update = self._conv_bn(inputs + prev_state, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
+            update += self._conv_bn(inputs + prev_state, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
             next_state = prev_state + update
 
             # update the cell TODO
