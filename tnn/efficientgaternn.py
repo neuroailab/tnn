@@ -75,7 +75,8 @@ class EfficientGateCell(ConvRNNCell):
                  num_groups=32,
                  strides=1,
                  se_ratio=0,
-                 residual_add=False
+                 residual_add=False,
+                 res_cell=False
     ):
         """ 
         Initialize the memory function of the EfficientGateCell.
@@ -88,6 +89,7 @@ class EfficientGateCell(ConvRNNCell):
         self.feedback_filter_size = ksize(feedback_filter_size)
         self.out_depth = out_depth
         self.in_depth = self.out_depth if in_depth is None else in_depth
+        self.res_cell = res_cell
         self.cell_depth = cell_depth
         self.bypass_state = bypass_state
         self.strides = strides
@@ -174,7 +176,11 @@ class EfficientGateCell(ConvRNNCell):
             next_state = prev_state + update
 
             # update the cell TODO
-            next_cell = prev_cell
+            if self.res_cell:
+                assert res_input is not None
+                next_cell = res_input
+            else:
+                next_cell = prev_cell
             
             # depthwise conv on expanded state, then squeeze-excitation, channel reduction, residual add
             inp = next_state if not self.bypass_state else (inputs + prev_state)
@@ -185,9 +191,11 @@ class EfficientGateCell(ConvRNNCell):
                 next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])
                 print("drop connect/residual adding", training_kwargs['drop_connect_rate'], res_input.name, res_input.shape.as_list())
                 next_out = tf.add(next_out, res_input)
-            elif (res_input is not None) and self.residual_add: # add the matching channels
+            elif (res_input is not None) and self.residual_add: # add the matching channels with resize if necessary
                 next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])                
                 next_out, remainder = tf.split(next_out, [res_input.shape.as_list()[-1], -1], axis=-1)
+                if res_input.shape.as_list()[1:3] != self.shape:
+                    res_input = tf.image.resize_images(res_input, size=self.shape)
                 next_out = tf.add(next_out, res_input)
                 next_out = tf.concat([next_out, remainder], axis=-1)
                 print("added matching channels", next_out.shape.as_list())                
