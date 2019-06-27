@@ -13,7 +13,7 @@ from tensorflow.contrib.rnn import RNNCell
 from tensorflow.python.framework import ops
 import tnn.spatial_transformer
 import tfutils.model
-from tfutils.model_tool_old import conv, fc
+from tfutils.model_tool_old import conv, fc, depth_conv
 import copy
 
 def laplacian_regularizer(scale, scope=None):
