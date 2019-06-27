@@ -247,10 +247,6 @@ class ReciprocalGateCell(ConvRNNCell):
 
         print('Setting edges init zero to be', self._edges_init_zero)
 
-#        self._partitioner = tf.variable_axis_size_partitioner(max_shard_bytes=(64 << 20)-1, axis=0)
-#        self._partitioner = tf.fixed_size_partitioner(num_shards=8, axis=0)
-        self._partitioner = None
-
     def state_size(self):
         return {'cell':self._cell_size, 'out':self._size}
 
@@ -583,7 +579,7 @@ class ReciprocalGateCell(ConvRNNCell):
         else:
             prev_out = state
         
-        with tf.variable_scope(type(self).__name__, partitioner=self._partitioner): # "ReciprocalGateCell"
+        with tf.variable_scope(type(self).__name__): # "ReciprocalGateCell"
 
             with tf.variable_scope('input'):
 
