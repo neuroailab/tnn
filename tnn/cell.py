@@ -13,6 +13,10 @@ from tensorflow.contrib.rnn import RNNCell
 from tensorflow.python.framework import ops
 import tnn.spatial_transformer
 import tfutils.model
+try:
+  from tfutils.model import conv, fc, depth_conv
+except:
+  from tfutils.model_tool_old import conv, fc, depth_conv
 import copy
 
 def laplacian_regularizer(scale, scope=None):
@@ -598,7 +602,6 @@ def harbor(inputs, shape, name, ff_inpnm=None, node_nms=['split', 'V1', 'V2', 'V
 
     return output
 
-
 def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     """
     Memory that decays over time
@@ -616,8 +619,8 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
-def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
-                 padding='SAME', batch_norm=False, is_training=False, init_zero=None, crossgpu_bn_kwargs={'use_crossgpu_bn': False},
+def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
+                 padding='SAME', batch_norm=False, group_norm=False, num_groups=32, is_training=False, init_zero=None, crossgpu_bn_kwargs={'use_crossgpu_bn': False},
                  batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True, time_sep=False, time_suffix=None):
 
     
@@ -628,6 +631,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
         kernel_init_kwargs = {}
     
     if inp.shape.as_list() == res_inp.shape.as_list():
+        if drop_connect_rate is not None and drop_connect_rate:
+            inp = drop_connect(inp, is_training, drop_connect_rate)
         return tf.add(inp, res_inp, name="residual_sum")
     elif inp.shape.as_list()[:-1] == res_inp.shape.as_list()[:-1]:
         # need to do a 1x1 conv to fix channels
@@ -662,6 +667,20 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
                                                           **crossgpu_bn_kwargs)
+        elif group_norm:
+            try:
+                projection_out = tfutils.model.groupnorm(
+                    inputs=projection_out,
+                    G=num_groups,
+                    data_format='channels_last',
+                    epsilon=batch_norm_epsilon) 
+            except:
+                projection_out = tfutils.model_tool_old.groupnorm(
+                    inputs=projection_out,
+                    G=num_groups,
+                    data_format='channels_last',
+                    epsilon=batch_norm_epsilon)
+                 
         return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
         if sp_resize: # usually do this if strides are kept to 1 always
@@ -696,9 +715,22 @@ def residual_add(inp, res_inp, dtype=tf.float32, kernel_init='xavier', kernel_in
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
                                                           **crossgpu_bn_kwargs)
+        elif group_norm:
+            try:
+                projection_out = tfutils.model.groupnorm(
+                    inputs=projection_out,
+                    G=num_groups,
+                    data_format='channels_last',
+                    epsilon=batch_norm_epsilon)
+            except:
+                projection_out = tfutils.model_tool_old.groupnorm(
+                    inputs=projection_out,
+                    G=num_groups,
+                    data_format='channels_last',
+                    epsilon=batch_norm_epsilon)
 
         return tf.add(inp, projection_out)
-    
+
 def component_conv(inp,
          inputs_list,
          out_depth,
@@ -712,8 +744,10 @@ def component_conv(inp,
          use_bias=True,
          bias=0,
          weight_decay=None,
-         activation=None,
-         batch_norm=False,
+                   activation=None,
+                   batch_norm=False,
+                   group_norm=False,
+                   num_groups=32,
          is_training=False,
          batch_norm_decay=0.9,
          batch_norm_epsilon=1e-5,
@@ -814,6 +848,21 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               activation=activation,
                                               time_suffix=time_suffix,
                                               **crossgpu_bn_kwargs)
+    elif group_norm:
+        try:
+            output = tfutils.model.groupnorm(
+                inputs=output,
+                G=num_groups,
+                data_format=data_format,
+                epsilon=batch_norm_epsilon,
+                weight_decay=weight_decay)      
+        except:
+            output = tfutils.model_tool_old.groupnorm(
+                inputs=output,
+                G=num_groups,
+                data_format=data_format,
+                epsilon=batch_norm_epsilon,
+                weight_decay=weight_decay)
 
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
@@ -1236,6 +1285,47 @@ def shared_xy_graph_conv(inp,
         out = tf.reshape(out, [B, 1, (H*W*node_multiplier) // (S**2), num_out_attrs])
 
     return out
+
+def drop_connect(inputs, is_training, drop_connect_rate):
+    if (not is_training) or (not drop_connect_rate):
+        return inputs
+
+    print("applying drop connect with rate %.2f" % drop_connect_rate)
+    
+    # compute keep prob
+    keep_prob = 1.0 - drop_connect_rate
+
+    # compute drop_connect_tensor
+    batch_size = tf.shape(inputs)[0]
+    random_tensor = keep_prob
+    random_tensor = random_tensor + tf.random_uniform([batch_size, 1, 1, 1], dtype=inputs.dtype)
+    binary_tensor = tf.floor(random_tensor)
+    output = tf.div(inputs, keep_prob) * binary_tensor
+    return output
+
+def squeeze_and_excitation(inputs,
+                           reduced_channels,
+                           activation=tf.nn.relu,
+                           kernel_init="variance_scaling",
+                           kernel_init_kwargs={'seed':0}):
+    '''
+    Squeeze and Excitation Layer
+    
+    inputs: [B,H,W,C] conv2d tensor with channels last
+    reduction_ratio: float in [0,1] to determine how much to squeeze channels
+    activation: nonlinear function to apply after reduction conv
+    '''
+    B,H,W,C = inputs.shape.as_list()
+    rC = max(1, int(reduced_channels))
+
+    se_tensor = tf.reduce_mean(inputs, axis=[1,2], keepdims=True) # [B,1,1,C]
+    with tf.variable_scope("se_reduce"):
+        se_tensor = conv(se_tensor, rC, ksize=[1,1], use_bias=True, activation=activation, kernel_init=kernel_init, kernel_init_kwargs=kernel_init_kwargs)
+    with tf.variable_scope("se_expand"):
+        se_tensor = conv(se_tensor, C, ksize=[1,1], use_bias=True, activation=None, kernel_init=kernel_init, kernel_init_kwargs=kernel_init_kwargs)
+
+    print("squeeze-excitation with %d to %d channels" % (C, rC))
+    return tf.nn.sigmoid(se_tensor) * inputs
     
 class GenFuncCell(RNNCell):
 

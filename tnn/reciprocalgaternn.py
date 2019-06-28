@@ -562,15 +562,16 @@ class ReciprocalGateCell(ConvRNNCell):
         inp = self._apply_recurrent_dropout(inp)
         return inp
     
-    def __call__(self, inputs, state, fb_input, res_input, time_sep=False, time_suffix=None):
+    def __call__(self, inputs, state, fb_input, res_input, time_sep=False, time_suffix=None, **training_kwargs):
         """
         Produce outputs of RecipCell, given inputs and previous state {'cell':cell_state, 'out':out_state}
 
         inputs: dict w keys ('ff', 'fb'). ff and fb inputs must have the same shape. 
         """
-
+        self._is_training = training_kwargs.get('is_training', self._is_training)
         if time_sep:
             assert time_suffix is not None
+            # print("time suffix, training?", time_suffix, self._is_training)
             
         dtype = inputs.dtype
 

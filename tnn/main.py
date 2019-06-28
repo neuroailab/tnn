@@ -24,7 +24,7 @@ def _get_func_from_kwargs(function, **kwargs):
             f = getattr(tnn.cell, function)
         except:
             try:
-                f = getattr(tfutils.model, function)
+                f = getattr(tfutils.model_tool_old, function)
             except:
                 try:
                    f = getattr(tfutils.model_tool_old, function)
@@ -40,6 +40,7 @@ def _get_func_from_kwargs(function, **kwargs):
 
 
 def import_json(json_file_name):
+    print("json file", json_file_name)
     with open(json_file_name) as f:
         json_data = json.load(f)
 
