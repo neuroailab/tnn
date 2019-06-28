@@ -13,7 +13,10 @@ from tensorflow.contrib.rnn import RNNCell
 from tensorflow.python.framework import ops
 import tnn.spatial_transformer
 import tfutils.model
-from tfutils.model_tool_old import conv, fc, depth_conv
+try:
+  from tfutils.model import conv, fc, depth_conv
+except:
+  from tfutils.model_tool_old import conv, fc, depth_conv
 import copy
 
 def laplacian_regularizer(scale, scope=None):
@@ -617,7 +620,7 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     return state
 
 def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
-                 padding='SAME', batch_norm=False, group_norm=False, num_groups=32, is_training=False, init_zero=None, 
+                 padding='SAME', batch_norm=False, group_norm=False, num_groups=32, is_training=False, init_zero=None, crossgpu_bn_kwargs={'use_crossgpu_bn': False},
                  batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True, time_sep=False, time_suffix=None):
 
     
@@ -652,7 +655,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
                                                           init_zero=init_zero, 
                                                           activation=None, 
                                                           data_format='channels_last',
-                                                          time_suffix=time_suffix)
+                                                          time_suffix=time_suffix,
+                                                          **crossgpu_bn_kwargs)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
                                                           is_training=is_training, 
@@ -661,15 +665,22 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
                                                           init_zero=init_zero, 
                                                           activation=None, 
                                                           data_format='channels_last',
-                                                          time_suffix=time_suffix)
+                                                          time_suffix=time_suffix,
+                                                          **crossgpu_bn_kwargs)
         elif group_norm:
-            projection_out = tfutils.model_tool_old.groupnorm(
-                inputs=projection_out,
-                G=num_groups,
-                data_format='channels_last',
-                epsilon=batch_norm_epsilon)
-
-            
+            try:
+                projection_out = tfutils.model.groupnorm(
+                    inputs=projection_out,
+                    G=num_groups,
+                    data_format='channels_last',
+                    epsilon=batch_norm_epsilon) 
+            except:
+                projection_out = tfutils.model_tool_old.groupnorm(
+                    inputs=projection_out,
+                    G=num_groups,
+                    data_format='channels_last',
+                    epsilon=batch_norm_epsilon)
+                 
         return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
         if sp_resize: # usually do this if strides are kept to 1 always
@@ -692,7 +703,8 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
                                                           init_zero=init_zero, 
                                                           activation=None, 
                                                           data_format='channels_last',
-                                                          time_suffix=time_suffix)
+                                                          time_suffix=time_suffix,
+                                                          **crossgpu_bn_kwargs)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
                                                           is_training=is_training, 
@@ -701,15 +713,22 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
                                                           init_zero=init_zero, 
                                                           activation=None, 
                                                           data_format='channels_last',
-                                                          time_suffix=time_suffix)
-
+                                                          time_suffix=time_suffix,
+                                                          **crossgpu_bn_kwargs)
         elif group_norm:
-            projection_out = tfutils.model_tool_old.groupnorm(
-                inputs=projection_out,
-                G=num_groups,
-                data_format='channels_last',
-                epsilon=batch_norm_epsilon)
-            
+            try:
+                projection_out = tfutils.model.groupnorm(
+                    inputs=projection_out,
+                    G=num_groups,
+                    data_format='channels_last',
+                    epsilon=batch_norm_epsilon)
+            except:
+                projection_out = tfutils.model_tool_old.groupnorm(
+                    inputs=projection_out,
+                    G=num_groups,
+                    data_format='channels_last',
+                    epsilon=batch_norm_epsilon)
+
         return tf.add(inp, projection_out)
 
 def component_conv(inp,
@@ -736,6 +755,7 @@ def component_conv(inp,
          return_input=False,
          time_sep=False,
          time_suffix=None,
+         crossgpu_bn_kwargs={'use_crossgpu_bn': False},
          name='component_conv'
          ):
 
@@ -816,7 +836,8 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
                                               activation=activation,
-                                              time_suffix=time_suffix)
+                                              time_suffix=time_suffix,
+                                              **crossgpu_bn_kwargs)
         except:
             output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
                                               is_training=is_training, 
@@ -825,15 +846,23 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
                                               activation=activation,
-                                              time_suffix=time_suffix)
+                                              time_suffix=time_suffix,
+                                              **crossgpu_bn_kwargs)
     elif group_norm:
-        output = tfutils.model_tool_old.groupnorm(
-            inputs=output,
-            G=num_groups,
-            data_format=data_format,
-            epsilon=batch_norm_epsilon,
-            weight_decay=weight_decay)
-            
+        try:
+            output = tfutils.model.groupnorm(
+                inputs=output,
+                G=num_groups,
+                data_format=data_format,
+                epsilon=batch_norm_epsilon,
+                weight_decay=weight_decay)      
+        except:
+            output = tfutils.model_tool_old.groupnorm(
+                inputs=output,
+                G=num_groups,
+                data_format=data_format,
+                epsilon=batch_norm_epsilon,
+                weight_decay=weight_decay)
 
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
@@ -860,6 +889,7 @@ def conv_bn(inp,
             batch_norm_decay=0.9,
             batch_norm_epsilon=1e-5,
             init_zero=None,
+            crossgpu_bn_kwargs={'use_crossgpu_bn': False},
             name='conv'):
 
     # assert out_shape is not None
@@ -907,7 +937,8 @@ def conv_bn(inp,
                                               decay = batch_norm_decay, 
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
-                                              activation=activation)
+                                              activation=activation,
+                                              **crossgpu_bn_kwargs)
         except:
             output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
                                               is_training=is_training, 
@@ -915,7 +946,8 @@ def conv_bn(inp,
                                               decay = batch_norm_decay, 
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
-                                              activation=activation)
+                                              activation=activation,
+                                              **crossgpu_bn_kwargs)
     
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
