@@ -3,7 +3,10 @@ from tensorflow.contrib.rnn import LSTMStateTuple
 import tfutils.model
 from tnn.cell import *
 from tnn.main import _get_func_from_kwargs
-from tfutils.model_tool_old import conv, depth_conv
+try:
+    from tfutils.model import conv, depth_conv
+except:
+    from tfutils.model_tool_old import conv, depth_conv
 import copy
 
 def ksize(val):
@@ -75,9 +78,10 @@ class EfficientGateCell(ConvRNNCell):
                  kernel_initializer_kwargs={},
                  weight_decay=None,
                  batch_norm=False,
-                 batch_norm_decay=0.99,
-                 batch_norm_epsilon=1e-3,
+                 batch_norm_decay=0.9,
+                 batch_norm_epsilon=1e-5,
                  batch_norm_gamma_init=1.0,
+                 crossgpu_bn_kwargs={'use_crossgpu_bn': False},
                  group_norm=False,
                  num_groups=32,
                  strides=1,
@@ -119,7 +123,8 @@ class EfficientGateCell(ConvRNNCell):
             'num_groups': num_groups,
             'batch_norm_decay': batch_norm_decay,
             'batch_norm_epsilon': batch_norm_epsilon,
-            'batch_norm_gamma_init': batch_norm_gamma_init
+            'batch_norm_gamma_init': batch_norm_gamma_init,
+            'crossgpu_bn_kwargs': crossgpu_bn_kwargs
         }
         self.conv_kwargs = {
             'strides': self.strides,            
@@ -244,8 +249,8 @@ class tnn_EfficientGateCell(ConvRNNCell):
         self.is_training = self.memory[1].get('is_training', True)
         self.training_kwargs = {
             'time_sep': self.memory[1].get('time_sep', True),
-            'dropout_rate': self.memory[1].get('dropout_rate', 0),
-            'drop_connect_rate': self.memory[1].get('drop_connect_rate', 0)
+            'dropout_rate': self.memory[1].get('dropout_rate', 1),
+            'drop_connect_rate': self.memory[1].get('drop_connect_rate', 1)
         }
         
         ### Memory includes both a typical ConvRNN cell (optional) and an IntegratedGraphCell (optional) ###

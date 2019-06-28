@@ -744,10 +744,10 @@ def component_conv(inp,
          use_bias=True,
          bias=0,
          weight_decay=None,
-                   activation=None,
-                   batch_norm=False,
-                   group_norm=False,
-                   num_groups=32,
+         activation=None,
+         batch_norm=False,
+         group_norm=False,
+         num_groups=32,
          is_training=False,
          batch_norm_decay=0.9,
          batch_norm_epsilon=1e-5,
@@ -1293,7 +1293,7 @@ def drop_connect(inputs, is_training, drop_connect_rate):
     print("applying drop connect with rate %.2f" % drop_connect_rate)
     
     # compute keep prob
-    keep_prob = 1.0 - drop_connect_rate
+    keep_prob = drop_connect_rate
 
     # compute drop_connect_tensor
     batch_size = tf.shape(inputs)[0]
