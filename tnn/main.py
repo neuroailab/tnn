@@ -24,7 +24,7 @@ def _get_func_from_kwargs(function, **kwargs):
             f = getattr(tnn.cell, function)
         except:
             try:
-                f = getattr(tfutils.model_tool_old, function)
+                f = getattr(tfutils.model, function)
             except:
                 try:
                    f = getattr(tfutils.model_tool_old, function)
