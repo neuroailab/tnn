@@ -1356,6 +1356,7 @@ class GenFuncCell(RNNCell):
         self._reuse = None
 
         self.internal_time = 0
+        self.max_internal_time = self.memory[1].get('max_internal_time', None)
 
     def __call__(self, inputs=None, state=None):
         """
@@ -1416,16 +1417,13 @@ class GenFuncCell(RNNCell):
                 self.state = None
             else:
                 mem_kwargs = copy.deepcopy(self.memory[1])
-                if 'no_state' in mem_kwargs.keys():
-                    mem_kwargs.pop('no_state')
+                mem_kwargs.pop('no_state', None)
+                mem_kwargs.pop('max_internal_time', None)
 
                 if state is None:
                     state = self.state_init[0](shape=output.shape,
                                            dtype=self.dtype_tmp,
                                            **self.state_init[1])
-
-                if mem_kwargs.get('time_sep', False):
-                    mem_kwargs['time_suffix'] = curr_time_suffix # used for scoping in the op
 
                 state = self.memory[0](output, state, **mem_kwargs)
                 self.state = tf.identity(state, name='state')
@@ -1452,7 +1450,8 @@ class GenFuncCell(RNNCell):
             self._reuse = True
         self.output_shape_tmp = self.output_tmp.shape
 
-        self.internal_time = self.internal_time + 1
+        if (self.max_internal_time is not None) and (self.internal_time < self.max_internal_time):
+            self.internal_time = self.internal_time + 1
 
         return self.output_tmp, self.state
 

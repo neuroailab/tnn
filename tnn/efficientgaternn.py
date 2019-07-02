@@ -244,6 +244,7 @@ class tnn_EfficientGateCell(ConvRNNCell):
 
         self._reuse = None
         self.internal_time = 0
+        self.max_internal_time = self.memory[1].get('max_internal_time', None)
 
         # Kwargs for trainining/validation"
         self.is_training = self.memory[1].get('is_training', True)
@@ -377,6 +378,7 @@ class tnn_EfficientGateCell(ConvRNNCell):
             self.output_tmp = tf.identity(tf.cast(output, self.dtype_tmp), name='output')
             self._reuse = True
             
-        self.internal_time += 1
+        if (self.max_internal_time is not None) and (self.internal_time < self.max_internal_time):
+            self.internal_time += 1
         return self.output_tmp, self.next_state
     

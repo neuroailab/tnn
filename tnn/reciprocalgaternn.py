@@ -861,6 +861,7 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
         self._reuse = None
 
         self.internal_time = 0
+        self.max_internal_time = self.memory[1].get('max_internal_time', None)
 
         # signature: ReciprocalGateCell(shape, ff_filter_size, cell_filter_size, cell_depth, out_depth, **kwargs)
         self._strides = self.pre_memory[0][1].get('strides', [1,1,1,1])[1:3]
@@ -873,6 +874,7 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
 
         mem_kwargs = copy.deepcopy(self.memory[1])
         mem_kwargs.pop('time_sep', None)
+        mem_kwargs.pop('max_internal_time', None)
         self.conv_cell = ReciprocalGateCell(**mem_kwargs)
 
 
@@ -958,7 +960,8 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
         self.state_shape = self.conv_cell.state_size() # DELETE?
         self.output_tmp_shape = self.output_tmp.shape # DELETE?
 
-        self.internal_time = self.internal_time + 1
+        if (self.max_internal_time is not None) and (self.internal_time < self.max_internal_time):
+            self.internal_time = self.internal_time + 1
 
         return self.output_tmp, self.state
 
