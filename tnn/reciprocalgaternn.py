@@ -325,13 +325,13 @@ class ReciprocalGateCell(ConvRNNCell):
             h = shape[1]
             w = shape[2]
             in_depth = shape[3]
-            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False) and not crossdevice_bn_kwargs.get('use_crtpu_bn', False):
+            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False):
                 data_format = 'NHWC'
         elif data_format == 'channels_first':
             h = shape[2]
             w = shape[3]
             in_depth = shape[1]
-            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False) and not crossdevice_bn_kwargs.get('use_crtpu_bn', False):
+            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False):
                 data_format = 'NCHW'
           
         if filter_size[0] > h:
@@ -416,13 +416,13 @@ class ReciprocalGateCell(ConvRNNCell):
             h = shape[1]
             w = shape[2]
             in_depth = shape[3]
-            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False) and not crossdevice_bn_kwargs.get('use_crtpu_bn', False):
+            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False):
                 data_format = 'NHWC'
         elif data_format == 'channels_first':
             h = shape[2]
             w = shape[3]
             in_depth = shape[1]
-            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False) and not crossdevice_bn_kwargs.get('use_crtpu_bn', False):
+            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False):
                 data_format = 'NCHW'
         
         if filter_size[0] > h:
