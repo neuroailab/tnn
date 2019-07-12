@@ -129,7 +129,10 @@ def init_nodes(G, input_nodes, batch_size=256, channel_op='concat', to_exclude=N
             shape = [batch_size] + attr['shape']
             kwargs['harbor_shape'] = shape
             output, state = attr['cell'](**kwargs)()
-            attr['output_shape'] = output.shape.as_list()
+            if isinstance(output, dict):
+                attr['output_shape'] = output['spatial'].shape.as_list()
+            else:
+                attr['output_shape'] = output.shape.as_list()
 
         # find output and initial harbor sizes for input nodes
         init_nodes = copy.copy(input_nodes)
@@ -146,7 +149,10 @@ def init_nodes(G, input_nodes, batch_size=256, channel_op='concat', to_exclude=N
                     kwargs = G.node[node]['kwargs']
                     kwargs['harbor_shape'] = G.node[shape_from]['output_shape'][:]
                     output, state = G.node[node]['cell'](**kwargs)()
-                    G.node[node]['output_shape'] = output.shape.as_list()
+                    if isinstance(output, dict):
+                        G.node[node]['output_shape'] = output['spatial'].shape.as_list()
+                    else:
+                        G.node[node]['output_shape'] = output.shape.as_list()                    
 
     # now correct harbor sizes to the final sizes and initialize cells
     for node, attr in G.nodes(data=True):

@@ -199,7 +199,7 @@ class EfficientGateCell(ConvRNNCell):
                 print("drop connect/residual adding", training_kwargs['drop_connect_rate'], res_input.name, res_input.shape.as_list())
                 next_out = tf.add(next_out, res_input)
             elif (res_input is not None) and self.residual_add: # add the matching channels with resize if necessary
-                next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])                
+                next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])
                 next_out, remainder = tf.split(next_out, [res_input.shape.as_list()[-1], -1], axis=-1)
                 if res_input.shape.as_list()[1:3] != self.shape:
                     res_input = tf.image.resize_images(res_input, size=self.shape)
