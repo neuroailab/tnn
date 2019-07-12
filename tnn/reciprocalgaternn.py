@@ -960,7 +960,7 @@ class tnn_ReciprocalGateCell(ConvRNNCell):
         self.state_shape = self.conv_cell.state_size() # DELETE?
         self.output_tmp_shape = self.output_tmp.shape # DELETE?
 
-        if (self.max_internal_time is not None) and (self.internal_time < self.max_internal_time):
+        if (self.max_internal_time is None) or ((self.max_internal_time is not None) and (self.internal_time < self.max_internal_time)):
             self.internal_time = self.internal_time + 1
 
         return self.output_tmp, self.state
