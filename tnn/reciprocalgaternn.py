@@ -99,7 +99,7 @@ class ReciprocalGateCell(ConvRNNCell):
                  batch_norm_cell_out=False,
                  batch_norm_decay=0.9,
                  batch_norm_epsilon=1e-5,
-                 crossgpu_bn_kwargs={'use_crossgpu_bn': False},
+                 crossdevice_bn_kwargs={},
                  gate_tau_bn_gamma_init=0.1,
                  edges_init_zero=None,
                  is_training=False):
@@ -233,7 +233,7 @@ class ReciprocalGateCell(ConvRNNCell):
         self._batch_norm_cell_out = batch_norm_cell_out
         self._batch_norm_decay = batch_norm_decay
         self._batch_norm_epsilon = batch_norm_epsilon
-        self._crossgpu_bn_kwargs = crossgpu_bn_kwargs
+        self._crossdevice_bn_kwargs = crossdevice_bn_kwargs
         self._is_training = is_training
         self._gate_tau_bn_gamma_init = gate_tau_bn_gamma_init
 
@@ -298,7 +298,7 @@ class ReciprocalGateCell(ConvRNNCell):
               batch_norm_constant_init=None,
               time_sep=False,
               time_suffix=None,
-              crossgpu_bn_kwargs={'use_crossgpu_bn': False}):
+              crossdevice_bn_kwargs={}):
         """convolution:
         Args:
         args: a 4D Tensor or a list of 4D, batch x n, Tensors.
@@ -325,13 +325,13 @@ class ReciprocalGateCell(ConvRNNCell):
             h = shape[1]
             w = shape[2]
             in_depth = shape[3]
-            if not crossgpu_bn_kwargs['use_crossgpu_bn']:
+            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False) and not crossdevice_bn_kwargs.get('use_crtpu_bn', False):
                 data_format = 'NHWC'
         elif data_format == 'channels_first':
             h = shape[2]
             w = shape[3]
             in_depth = shape[1]
-            if not crossgpu_bn_kwargs['use_crossgpu_bn']:
+            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False) and not crossdevice_bn_kwargs.get('use_crtpu_bn', False):
                 data_format = 'NCHW'
           
         if filter_size[0] > h:
@@ -366,7 +366,7 @@ class ReciprocalGateCell(ConvRNNCell):
                                                    init_zero=batch_norm_init_zero, 
                                                    activation=None,
                                                    time_suffix=time_suffix,
-                                                   **crossgpu_bn_kwargs)
+                                                   **crossdevice_bn_kwargs)
 
             elif use_bias:
                 if bias_initializer is None:
@@ -401,7 +401,7 @@ class ReciprocalGateCell(ConvRNNCell):
                  batch_norm_constant_init=None,
                  time_sep=False,
                  time_suffix=None,
-                 crossgpu_bn_kwargs={'use_crossgpu_bn': False}):
+                 crossdevice_bn_kwargs={}):
 
         if time_sep:
             assert time_suffix is not None
@@ -416,13 +416,13 @@ class ReciprocalGateCell(ConvRNNCell):
             h = shape[1]
             w = shape[2]
             in_depth = shape[3]
-            if not crossgpu_bn_kwargs['use_crossgpu_bn']:
+            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False) and not crossdevice_bn_kwargs.get('use_crtpu_bn', False):
                 data_format = 'NHWC'
         elif data_format == 'channels_first':
             h = shape[2]
             w = shape[3]
             in_depth = shape[1]
-            if not crossgpu_bn_kwargs['use_crossgpu_bn']:
+            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False) and not crossdevice_bn_kwargs.get('use_crtpu_bn', False):
                 data_format = 'NCHW'
         
         if filter_size[0] > h:
@@ -475,7 +475,7 @@ class ReciprocalGateCell(ConvRNNCell):
                                                    init_zero=batch_norm_init_zero, 
                                                    activation=None,
                                                    time_suffix=time_suffix,
-                                                   **crossgpu_bn_kwargs)
+                                                   **crossdevice_bn_kwargs)
             elif use_bias:
                 bias = tf.get_variable("bias",
                                        [out_depth],
@@ -542,7 +542,7 @@ class ReciprocalGateCell(ConvRNNCell):
                            batch_norm_constant_init=batch_norm_constant_init,
                            time_sep=time_sep,
                            time_suffix=time_suffix,
-                           crossgpu_bn_kwargs=self._crossgpu_bn_kwargs)
+                           crossdevice_bn_kwargs=self._crossdevice_bn_kwargs)
         else: # not separable, use regular conv
             inp = self._conv(inp, filter_size, out_depth, scope, 
                         use_bias=use_bias,
@@ -556,7 +556,7 @@ class ReciprocalGateCell(ConvRNNCell):
                         batch_norm_constant_init=batch_norm_constant_init,
                         time_sep=time_sep,
                         time_suffix=time_suffix,
-                        crossgpu_bn_kwargs=self._crossgpu_bn_kwargs)
+                        crossdevice_bn_kwargs=self._crossdevice_bn_kwargs)
 
         # apply recurrent dropout
         inp = self._apply_recurrent_dropout(inp)
@@ -673,7 +673,7 @@ class ReciprocalGateCell(ConvRNNCell):
                                                            constant_init=None, 
                                                            activation=None,
                                                            time_suffix=time_suffix,
-                                                           **self._crossgpu_bn_kwargs)
+                                                           **self._crossdevice_bn_kwargs)
 
                     next_cell = self._cell_activation(next_cell)
 
@@ -697,7 +697,7 @@ class ReciprocalGateCell(ConvRNNCell):
                                              batch_norm_epsilon=self._batch_norm_epsilon,
                                              time_sep=time_sep,
                                              time_suffix=time_suffix,
-                                             crossgpu_bn_kwargs=self._crossgpu_bn_kwargs)                        
+                                             crossdevice_bn_kwargs=self._crossdevice_bn_kwargs)                        
                     else:
                         in_to_out_kernel = tf.get_variable("input_to_out_weights",
                                                            [self.in_out_filter_size[0], self.in_out_filter_size[1], self.out_depth, self.out_depth],
@@ -720,7 +720,7 @@ class ReciprocalGateCell(ConvRNNCell):
                                                                constant_init=None, 
                                                                activation=None,
                                                                time_suffix=time_suffix,
-                                                               **self._crossgpu_bn_kwargs)      
+                                                               **self._crossdevice_bn_kwargs)      
                 else:
                     out_input = tf.identity(inputs, name="out_input")
 
@@ -744,7 +744,7 @@ class ReciprocalGateCell(ConvRNNCell):
                                              sp_resize=True,
                                              time_sep=time_sep,
                                              time_suffix=time_suffix,
-                                             crossgpu_bn_kwargs=self._crossgpu_bn_kwargs)                   
+                                             crossdevice_bn_kwargs=self._crossdevice_bn_kwargs)                   
                     
                 if fb_input is not None and self.feedback_entry == 'out':
                     if fb_input.shape.as_list()[1:3] == prev_out.shape.as_list()[1:3]:
@@ -820,7 +820,7 @@ class ReciprocalGateCell(ConvRNNCell):
                                                        constant_init=None, 
                                                        activation=None,
                                                        time_suffix=time_suffix,
-                                                       **self._crossgpu_bn_kwargs)
+                                                       **self._crossdevice_bn_kwargs)
 
                 next_out = self._out_activation(next_out)
 

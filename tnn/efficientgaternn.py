@@ -81,7 +81,7 @@ class EfficientGateCell(ConvRNNCell):
                  batch_norm_decay=0.9,
                  batch_norm_epsilon=1e-5,
                  batch_norm_gamma_init=1.0,
-                 crossgpu_bn_kwargs={'use_crossgpu_bn': False},
+                 crossdevice_bn_kwargs={},
                  group_norm=False,
                  num_groups=32,
                  strides=1,
@@ -124,7 +124,7 @@ class EfficientGateCell(ConvRNNCell):
             'batch_norm_decay': batch_norm_decay,
             'batch_norm_epsilon': batch_norm_epsilon,
             'batch_norm_gamma_init': batch_norm_gamma_init,
-            'crossgpu_bn_kwargs': crossgpu_bn_kwargs
+            'crossdevice_bn_kwargs': crossdevice_bn_kwargs
         }
         self.conv_kwargs = {
             'strides': self.strides,            
