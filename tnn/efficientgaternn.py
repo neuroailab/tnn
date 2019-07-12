@@ -378,7 +378,7 @@ class tnn_EfficientGateCell(ConvRNNCell):
             self.output_tmp = tf.identity(tf.cast(output, self.dtype_tmp), name='output')
             self._reuse = True
             
-        if (self.max_internal_time is not None) and (self.internal_time < self.max_internal_time):
+        if (self.max_internal_time is None) or ((self.max_internal_time is not None) and (self.internal_time < self.max_internal_time)):
             self.internal_time += 1
         return self.output_tmp, self.next_state
     

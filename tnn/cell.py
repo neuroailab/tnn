@@ -1450,8 +1450,8 @@ class GenFuncCell(RNNCell):
             self._reuse = True
         self.output_shape_tmp = self.output_tmp.shape
 
-        if (self.max_internal_time is not None) and (self.internal_time < self.max_internal_time):
-            self.internal_time = self.internal_time + 1
+        if (self.max_internal_time is None) or ((self.max_internal_time is not None) and (self.internal_time < self.max_internal_time)):
+            self.internal_time += 1
 
         return self.output_tmp, self.state
 
