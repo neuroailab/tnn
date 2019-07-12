@@ -86,6 +86,7 @@ class ReciprocalGateCell(ConvRNNCell):
                  input_to_cell=False,
                  input_to_out=False,
                  cell_to_out=False,
+                 data_format='channels_last',
                  kernel_initializer='xavier',
                  kernel_initializer_kwargs=None,
                  bias_initializer=tf.zeros_initializer,
@@ -138,7 +139,8 @@ class ReciprocalGateCell(ConvRNNCell):
         self.gate_depth_separable = gate_depth_separable
         self.in_out_depth_separable = in_out_depth_separable
         self.ds_repeat = ds_repeat
-        
+        self.data_format = data_format
+
         if self.gate_filter_size == [0,0]:
             self.use_cell = False
         else:
@@ -325,14 +327,10 @@ class ReciprocalGateCell(ConvRNNCell):
             h = shape[1]
             w = shape[2]
             in_depth = shape[3]
-            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False):
-                data_format = 'NHWC'
         elif data_format == 'channels_first':
             h = shape[2]
             w = shape[3]
             in_depth = shape[1]
-            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False):
-                data_format = 'NCHW'
           
         if filter_size[0] > h:
             filter_size[0] = h
@@ -416,14 +414,10 @@ class ReciprocalGateCell(ConvRNNCell):
             h = shape[1]
             w = shape[2]
             in_depth = shape[3]
-            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False):
-                data_format = 'NHWC'
         elif data_format == 'channels_first':
             h = shape[2]
             w = shape[3]
             in_depth = shape[1]
-            if not crossdevice_bn_kwargs.get('use_crossgpu_bn', False):
-                data_format = 'NCHW'
         
         if filter_size[0] > h:
             ksize[0] = h
@@ -518,8 +512,7 @@ class ReciprocalGateCell(ConvRNNCell):
                            out_depth, 
                            scope, 
                            separable, 
-                           use_bias=True, 
-                           data_format='channels_last', 
+                           use_bias=True,
                            batch_norm_init_zero=False,
                            batch_norm_constant_init=None,
                            time_sep=False,
@@ -535,6 +528,7 @@ class ReciprocalGateCell(ConvRNNCell):
                            kernel_initializer=self._kernel_initializer,
                            weight_decay=self._weight_decay,
                            is_training=self._is_training,
+                           data_format=self.data_format,
                            batch_norm=self._batch_norm,
                            batch_norm_decay=self._batch_norm_decay,
                            batch_norm_epsilon=self._batch_norm_epsilon,
@@ -549,6 +543,7 @@ class ReciprocalGateCell(ConvRNNCell):
                         kernel_initializer=self._kernel_initializer,
                         weight_decay=self._weight_decay,
                         is_training=self._is_training,
+                        data_format=self.data_format,
                         batch_norm=self._batch_norm,
                         batch_norm_decay=self._batch_norm_decay,
                         batch_norm_epsilon=self._batch_norm_epsilon,
@@ -666,7 +661,7 @@ class ReciprocalGateCell(ConvRNNCell):
                     elif self._batch_norm_cell_out:
                         next_cell = self._batch_norm_func(inputs=next_cell, 
                                                            is_training=self._is_training, 
-                                                           data_format='channels_last', 
+                                                           data_format=self.data_format, 
                                                            decay = self._batch_norm_decay, 
                                                            epsilon = self._batch_norm_epsilon, 
                                                            init_zero=False, 
@@ -713,7 +708,7 @@ class ReciprocalGateCell(ConvRNNCell):
                         if self._batch_norm:
                             out_input = self._batch_norm_func(inputs=out_input, 
                                                                is_training=self._is_training, 
-                                                               data_format='channels_last', 
+                                                               data_format=self.data_format, 
                                                                decay = self._batch_norm_decay, 
                                                                epsilon = self._batch_norm_epsilon, 
                                                                init_zero=False, 
@@ -813,7 +808,7 @@ class ReciprocalGateCell(ConvRNNCell):
                 elif self._batch_norm_cell_out:
                     next_out = self._batch_norm_func(inputs=next_out, 
                                                        is_training=self._is_training, 
-                                                       data_format='channels_last', 
+                                                       data_format=self.data_format, 
                                                        decay = self._batch_norm_decay, 
                                                        epsilon = self._batch_norm_epsilon, 
                                                        init_zero=False, 
