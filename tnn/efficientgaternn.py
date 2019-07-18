@@ -262,6 +262,7 @@ class tnn_EfficientGateCell(ConvRNNCell):
         self._pre_conv_idx = idx
 
         if self.memory[1].get('convrnn_cell', None) == "EfficientGateCell":
+            self.convrnn_cell_kwargs['shape'] = self.harbor_shape[-3:-1] # set shape of memory layer
             if 'in_depth' not in self.convrnn_cell_kwargs:
                 self.convrnn_cell_kwargs['in_depth'] = self.pre_memory_out_depth # the expansion width
             if 'out_depth' not in self.convrnn_cell_kwargs:
