@@ -1287,7 +1287,7 @@ def shared_xy_graph_conv(inp,
     return out
 
 def drop_connect(inputs, is_training, drop_connect_rate):
-    if (not is_training) or (drop_connect_rate): # if drop_connect_rate is 1.0 we do not apply it
+    if (not is_training) or (drop_connect_rate == 1.0): # if drop_connect_rate is 1.0 we do not apply it
         return inputs
 
     print("applying drop connect with rate %.2f" % drop_connect_rate)
