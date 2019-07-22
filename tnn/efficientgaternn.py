@@ -176,8 +176,6 @@ class EfficientGateCell(ConvRNNCell):
             # combine fb input with ff input
             if fb_input is not None:
                 update += self._conv_bn(fb_input, self.feedback_filter_size, out_depth=self.in_depth, depthwise=False, activation=True, scope="feedback_to_state")
-                print("added feedback: %s of shape %s" % (fb_input.name, fb_input.shape.as_list()))
-
             # update the state with a kxk depthwise conv/bn/relu
             update += self._conv_bn(inputs + prev_state, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
             next_state = prev_state + update
@@ -191,12 +189,10 @@ class EfficientGateCell(ConvRNNCell):
             
             # depthwise conv on expanded state, then squeeze-excitation, channel reduction, residual add
             inp = next_state if not self.bypass_state else (inputs + prev_state)
-            print("bypassed state?", self.bypass_state)
             next_out = self._se(inp, self._se_ratio * self.res_depth)
             next_out = self._conv_bn(next_out, [1,1], out_depth=self.out_depth, depthwise=False, activation=False, scope="state_to_out")
             if (res_input is not None) and (res_input.shape.as_list() == next_out.shape.as_list()):
                 next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])
-                print("drop connect/residual adding", training_kwargs['drop_connect_rate'], res_input.name, res_input.shape.as_list())
                 next_out = tf.add(next_out, res_input)
             elif (res_input is not None) and self.residual_add: # add the matching channels with resize if necessary
                 next_out = drop_connect(next_out, self.bn_kwargs['is_training'], training_kwargs['drop_connect_rate'])
@@ -205,7 +201,6 @@ class EfficientGateCell(ConvRNNCell):
                     res_input = tf.image.resize_images(res_input, size=self.shape)
                 next_out = tf.add(next_out, res_input)
                 next_out = tf.concat([next_out, remainder], axis=-1)
-                print("added matching channels", next_out.shape.as_list())                
 
             # concat back on the cell
             next_state = tf.concat([next_cell, next_state], axis=3, name="cell_concat_next_state")

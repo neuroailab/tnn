@@ -1292,7 +1292,6 @@ def squeeze_and_excitation(inputs,
     with tf.variable_scope("se_expand"):
         se_tensor = conv(se_tensor, C, ksize=[1,1], use_bias=True, activation=None, kernel_init=kernel_init, kernel_init_kwargs=kernel_init_kwargs)
 
-    print("squeeze-excitation with %d to %d channels" % (C, rC))
     return tf.nn.sigmoid(se_tensor) * inputs
     
 class GenFuncCell(RNNCell):
