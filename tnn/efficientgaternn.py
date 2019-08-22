@@ -81,6 +81,7 @@ class EfficientGateCell(ConvRNNCell):
                  batch_norm_decay=0.9,
                  batch_norm_epsilon=1e-5,
                  batch_norm_gamma_init=1.0,
+                 bn_trainable=True,
                  crossdevice_bn_kwargs={},
                  group_norm=False,
                  num_groups=32,
@@ -124,6 +125,7 @@ class EfficientGateCell(ConvRNNCell):
             'batch_norm_decay': batch_norm_decay,
             'batch_norm_epsilon': batch_norm_epsilon,
             'batch_norm_gamma_init': batch_norm_gamma_init,
+            'bn_trainable': bn_trainable,
             'crossdevice_bn_kwargs': crossdevice_bn_kwargs
         }
         self.conv_kwargs = {
