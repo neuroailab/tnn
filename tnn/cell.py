@@ -621,7 +621,7 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
 
 def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
                  padding='SAME', batch_norm=False, group_norm=False, num_groups=32, is_training=False, init_zero=None, crossdevice_bn_kwargs={},
-                 batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True, time_sep=False, time_suffix=None):
+                 batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True, time_sep=False, time_suffix=None, bn_trainable=True):
 
     
     if time_sep:
@@ -656,6 +656,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
                                                           activation=None, 
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
+                                                          bn_trainable=bn_trainable,
                                                           **crossdevice_bn_kwargs)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
@@ -666,6 +667,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
                                                           activation=None, 
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
+                                                          bn_trainable=bn_trainable,
                                                           **crossdevice_bn_kwargs)
         elif group_norm:
             try:
@@ -704,6 +706,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
                                                           activation=None, 
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
+                                                          bn_trainable=bn_trainable,
                                                           **crossdevice_bn_kwargs)
             except:
                 projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
@@ -714,6 +717,7 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
                                                           activation=None, 
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
+                                                          bn_trainable=bn_trainable,
                                                           **crossdevice_bn_kwargs)
         elif group_norm:
             try:
@@ -755,6 +759,7 @@ def component_conv(inp,
          return_input=False,
          time_sep=False,
          time_suffix=None,
+         bn_trainable=True,
          crossdevice_bn_kwargs={},
          name='component_conv'
          ):
@@ -837,6 +842,7 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               init_zero=init_zero, 
                                               activation=activation,
                                               time_suffix=time_suffix,
+                                              bn_trainable=bn_trainable,
                                               **crossdevice_bn_kwargs)
         except:
             output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
@@ -847,6 +853,7 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                                               init_zero=init_zero, 
                                               activation=activation,
                                               time_suffix=time_suffix,
+                                              bn_trainable=bn_trainable,
                                               **crossdevice_bn_kwargs)
     elif group_norm:
         try:
@@ -889,6 +896,7 @@ def conv_bn(inp,
             batch_norm_decay=0.9,
             batch_norm_epsilon=1e-5,
             init_zero=None,
+            bn_trainable=True,
             crossdevice_bn_kwargs={},
             name='conv'):
 
@@ -938,6 +946,7 @@ def conv_bn(inp,
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
                                               activation=activation,
+                                              bn_trainable=bn_trainable,
                                               **crossdevice_bn_kwargs)
         except:
             output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
@@ -947,6 +956,7 @@ def conv_bn(inp,
                                               epsilon = batch_norm_epsilon, 
                                               init_zero=init_zero, 
                                               activation=activation,
+                                              bn_trainable=bn_trainable,
                                               **crossdevice_bn_kwargs)
     
     if activation is not None:
