@@ -66,6 +66,7 @@ class EfficientGateCell(ConvRNNCell):
                  tau_filter_size,
                  in_depth=None,
                  cell_depth=0,
+                 feedforward=False,
                  bypass_state=False,
                  gate_filter_size=[3,3],
                  feedback_filter_size=[1,1],
@@ -98,6 +99,7 @@ class EfficientGateCell(ConvRNNCell):
         self.in_depth = self.out_depth if in_depth is None else in_depth
         self.res_cell = res_cell
         self.cell_depth = cell_depth
+        self.feedforward = feedforward
         self.bypass_state = bypass_state
         self.strides = strides
         self.residual_add = residual_add
@@ -177,8 +179,14 @@ class EfficientGateCell(ConvRNNCell):
             if fb_input is not None:
                 update += self._conv_bn(fb_input, self.feedback_filter_size, out_depth=self.in_depth, depthwise=False, activation=True, scope="feedback_to_state")
             # update the state with a kxk depthwise conv/bn/relu
-            update += self._conv_bn(inputs + prev_state, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
-            next_state = prev_state + update
+            if self.feedforward:
+                update += self._conv_bn(inputs, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
+                next_state = update
+                print("next state", next_state)
+                import pdb.set_trace()
+            else: # state will accumulate
+                update += self._conv_bn(inputs + prev_state, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
+                next_state = prev_state + update
 
             # update the cell TODO
             if self.res_cell:
