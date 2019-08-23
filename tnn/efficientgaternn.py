@@ -182,8 +182,7 @@ class EfficientGateCell(ConvRNNCell):
             if self.feedforward:
                 update += self._conv_bn(inputs, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
                 next_state = update
-                print("next state", next_state)
-                import pdb.set_trace()
+                print("treating EGC as feedforward")
             else: # state will accumulate
                 update += self._conv_bn(inputs + prev_state, self.tau_filter_size, depthwise=True, activation=True, scope="state_to_state")
                 next_state = prev_state + update
