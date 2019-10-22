@@ -166,7 +166,6 @@ class EfficientGateCell(ConvRNNCell):
         self.bn_kwargs.update({'time_suffix': training_kwargs.get('time_suffix', None),
                                'time_sep': training_kwargs.get('time_sep', True)}) # time suffix
         self.res_depth = res_input.shape.as_list()[-1] if res_input is not None else self.out_depth        
-        # print("bn kwargs", self.bn_kwargs['time_suffix'])
         
         # get previous state
         prev_cell, prev_state = tf.split(value=state, num_or_size_splits=[self.cell_depth, self.in_depth], axis=3, name="state_split")
@@ -175,8 +174,9 @@ class EfficientGateCell(ConvRNNCell):
         with tf.variable_scope(type(self).__name__): # "EfficientGateCell"
 
             update = tf.zeros_like(inputs)
+            
             # combine fb input with ff input
-            if fb_input is not None:
+            if fb_input is not None: # if there's an input and feedback_filter_size != 0
                 update += self._conv_bn(fb_input, self.feedback_filter_size, out_depth=self.in_depth, depthwise=False, activation=True, scope="feedback_to_state")
             # update the state with a kxk depthwise conv/bn/relu
             if self.feedforward:
