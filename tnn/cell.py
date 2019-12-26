@@ -22,10 +22,10 @@ import copy
 def laplacian_regularizer(scale, scope=None):
     ''' Compute loss term by filtering a rank-4 tensor with the discrete Laplacian kernel.
     Takes the root-sum-of-squares across space, then sums across the out-channel dimension.
-    
+
     weights: a rank 4 tensor that represents a filter for a spatial input. Shape: [H, W, D, Num_output_channels]
     scale: a real scalar to multiply the loss'''
-    
+
     if isinstance(scale, numbers.Integral):
         raise ValueError('scale cannot be an integer: %s' % scale)
     if isinstance(scale, numbers.Real):
@@ -34,21 +34,21 @@ def laplacian_regularizer(scale, scope=None):
                        scale)
         if scale == 0.:
           return lambda _: None
-    
+
     def laplacian_loss(weights, name=None):
 
         with ops.name_scope(scope, 'laplacian_regularizer', [weights]) as name:
             my_scale = ops.convert_to_tensor(scale,
                                              dtype=weights.dtype.base_dtype,
                                              name='scale')
-        
+
             # for spatial/feature-factored readout weights, the mask input is shape [H, W, out_channels, 1]
             if weights.get_shape().as_list()[-1] == 1:
                 weights = tf.transpose(weights, perm=(0,1,3,2)) # put in order [H, W, 1, out_channels]
 
             # weights for readout have shape [h, w, d, out_channels]
             weights = tf.transpose(weights, perm=(3,0,1,2)) # out_ch treated as "batch" dimension of a convolution
-            ch_in = weights.get_shape().as_list()[-1] 
+            ch_in = weights.get_shape().as_list()[-1]
             L = tf.constant(value=[[0.5, 1, 0.5], [1, -6, 1], [0.5, 1, 0.5]], dtype=tf.float32) # 2D Laplacian kernel of shape [3,3]
             L = tf.reshape(L, shape=[3,3,1,1])
             L = tf.zeros(shape=[3,3,ch_in,1], dtype=tf.float32) + L # Broadcast L to ch_in copies of the same kernel
@@ -61,16 +61,16 @@ def laplacian_regularizer(scale, scope=None):
             loss = tf.scalar_mul(my_scale, loss)
             return tf.identity(loss, name=name)
 
-    
+
     return laplacian_loss
 
 
 def group_sparsity_regularizer(scale, scope=None):
     ''' Compute loss term that is L2 over H,W spatial dimensions and L1 over D and out_channels.
-    
+
         weights: a rank 4 tensor that represents a filter for a spatial input. Shape: [H, W, D, Num_output_channels]
         scale: a real scalar to multiply the loss'''
-    
+
     if isinstance(scale, numbers.Integral):
         raise ValueError('scale cannot be an integer: %s' % scale)
     if isinstance(scale, numbers.Real):
@@ -79,26 +79,26 @@ def group_sparsity_regularizer(scale, scope=None):
                        scale)
         if scale == 0.:
           return lambda _: None
-    
+
     def group_sparsity_loss(weights, name=None):
-        
+
         with ops.name_scope(scope, 'group_sparsity_regularizer', [weights]) as name:
             my_scale = ops.convert_to_tensor(scale,
                                              dtype=weights.dtype.base_dtype,
                                              name='scale')
-            
+
             weights = tf.transpose(weights, perm=(3,0,1,2))
             channelwise_l2 = tf.sqrt(tf.reduce_sum(tf.square(weights), axis=(1,2))) # sum across H, W spatial dimensions
             loss = tf.scalar_mul(my_scale, tf.reduce_sum(channelwise_l2)) # sum across D and out_channels, i.e. L1 on D
             return tf.identity(loss, name=name)
-        
+
     return group_sparsity_loss
 
 def _get_regularizer(reg_scales=None):
     '''
     Helper function to construct a tensorflow regularizer from a dict of scales to apply to each
     '''
-    
+
     if reg_scales is None:
         return None
     else:
@@ -118,7 +118,7 @@ def _get_regularizer(reg_scales=None):
             regs.append(group_sparsity_regularizer(scale_group))
 
         reg_func = tf.contrib.layers.sum_regularizer(regs)
-        
+
     return reg_func
 
 
@@ -129,7 +129,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
 
     if l1_inpnm not in node_nms:
         node_nms = [l1_inpnm] + node_nms # easy to forget to add this
-    
+
     # determine the skip and possible feedback inputs to this layer
     ff_idx = 0
     for idx, elem in enumerate(node_nms):
@@ -149,7 +149,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
             nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
         else:
             nm = l1_inpnm
-      
+
         if ff_inpnm == nm:
             ff_in = inp
         elif nm in feedbacks: # a feedback input
@@ -162,7 +162,7 @@ def gather_inputs(inputs, shape, l1_inpnm, ff_inpnm, node_nms):
                 raise ValueError
         elif nm in skips:
             skip_ins.append(inp)
-    
+
     return ff_in, skip_ins, feedback_ins
 
 def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier', weight_decay=None, reuse=None, ff_inpnm=None, ksize=3, activation=None, kernel_init_kwargs=None, padding='SAME', out_depth_per_input=None):
@@ -187,7 +187,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                     nm = pat.sub('__', inp.name.split('/')[-2].split('_')[0])
                     nm = 'conv_to_fc_harbor_for_%s' % nm
                     with tf.variable_scope(nm, reuse=reuse):
-                        out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init, kernel_init_kwargs=kernel_init_kwargs, weight_decay=weight_decay, activation=activation, batch_norm=False)    
+                        out = tfutils.model.fc(out, shape[1], kernel_init=kernel_init, kernel_init_kwargs=kernel_init_kwargs, weight_decay=weight_decay, activation=activation, batch_norm=False)
 
                 outputs.append(out)
             else:
@@ -265,7 +265,7 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
                 for output_elem in outputs[2:]:
                     output = tf.multiply(output, output_elem)
     else:
-        output = tf.concat(outputs, axis=-1, name='harbor')  
+        output = tf.concat(outputs, axis=-1, name='harbor')
 
     return output
 
@@ -276,7 +276,7 @@ def crop_func(inputs, l1_inpnm, ff_inpnm, node_nms, shape, kernel_init, channel_
     not_ff = feedback_ins + skip_ins
     if len(not_ff) == 0 or ff_in is None or len(shape) != 4 or len(ff_in.shape) != 4: # we do nothing in this case, and proceed as usual (appeases initialization too)
         return inputs
-    # combine skips and feedbacks to learn the crop from 
+    # combine skips and feedbacks to learn the crop from
     not_ff_ins = tf.concat(not_ff, axis=-1, name='comb')
     mlp_nm = 'crop_mlp_for_%s' % ff_inpnm
     with tf.variable_scope(mlp_nm, reuse=reuse):
@@ -335,7 +335,7 @@ def tile_func(inp, shape):
     height_multiple = 1 + (shape[1] // inp_height)
     width_multiple = 1 + (shape[2] // inp_width)
     tiled_out = tf.tile(inp, [1, height_multiple, width_multiple, 1])
-    return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32) 
+    return tf.map_fn(lambda im: tf.image.resize_image_with_crop_or_pad(im, shape[1], shape[2]), tiled_out, dtype=tf.float32)
 
 def transform_func(inp, shape, weight_decay, ff_inpnm, reuse):
     '''Learn an affine transformation on the input inp if it is a feedback or skip'''
@@ -404,7 +404,7 @@ def deconv(inp, shape, weight_decay=None, ksize=[3, 3], activation='relu', paddi
                                      shape=[ksize[0], ksize[1], in_ch, out_ch],
                                      dtype=tf.float32,
                                      regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
-                                     name='weights')  
+                                     name='weights')
 
             biases = tf.get_variable(initializer=tf.zeros_initializer(),
                                      shape=[out_ch],
@@ -427,7 +427,7 @@ def deconv(inp, shape, weight_decay=None, ksize=[3, 3], activation='relu', paddi
             if activation is not None:
                 output = getattr(tf.nn, activation)(output, name=activation)
             return output
-        
+
     else: # a feedback that requires transposed convolution
         nm = 'deconv_for_%s' % orig_nm
         with tf.variable_scope(nm, reuse=reuse):
@@ -441,7 +441,7 @@ def deconv(inp, shape, weight_decay=None, ksize=[3, 3], activation='relu', paddi
                                     shape=[ksize[0], ksize[1], out_ch, in_ch],
                                     dtype=tf.float32,
                                     regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
-                                    name='weights')  
+                                    name='weights')
 
            biases = tf.get_variable(initializer=tf.zeros_initializer(),
                                    shape=[out_ch],
@@ -485,7 +485,7 @@ def sptransform_preproc(inputs, l1_inpnm, ff_inpnm, node_nms, shape, spatial_op,
     # aggregate feedforward input
     ff_out = input_aggregator(new_inputs, shape, spatial_op, channel_op, kernel_init, weight_decay, reuse, ff_inpnm)
     #print('ff out: ', ff_out.shape, 'shape: ', shape)
-    # combine skips and feedbacks to learn the affine transform from 
+    # combine skips and feedbacks to learn the affine transform from
     not_ff_ins = tf.concat(not_ff, axis=-1, name='comb')
     if dropout is not None:
         not_ff_ins = tf.nn.dropout(not_ff_ins, keep_prob=dropout)
@@ -550,7 +550,7 @@ def gate_preproc(inputs, shape, spatial_op, channel_op, kernel_init, weight_deca
             feedback_inps.append(inp)
 
     out_terms = ff_inp
-    for inp in feedback_inps: # create gates for each feedback 
+    for inp in feedback_inps: # create gates for each feedback
         pat = re.compile(':|/')
         if len(inp.name.split('/')) == 1:
             orig_nm = pat.sub('__', inp.name.split('/')[-1].split('_')[0])
@@ -619,17 +619,17 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
     state = tf.add(state * mem, inp, name=name)
     return state
 
-def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
+def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1],
                  padding='SAME', batch_norm=False, group_norm=False, num_groups=32, is_training=False, init_zero=None, crossdevice_bn_kwargs={},
                  batch_norm_decay=0.9, batch_norm_epsilon=1e-5, sp_resize=True, time_sep=False, time_suffix=None, bn_trainable=True):
 
-    
+
     if time_sep:
         assert time_suffix is not None
 
     if kernel_init_kwargs is None:
         kernel_init_kwargs = {}
-    
+
     if inp.shape.as_list() == res_inp.shape.as_list():
         if drop_connect_rate is not None:
             inp = drop_connect(inp, is_training, drop_connect_rate)
@@ -648,23 +648,23 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
         projection_out = tf.nn.conv2d(res_inp, res_to_out_kernel, strides=strides, padding=padding)
         if batch_norm:
             try:
-                projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, 
-                                                          is_training=is_training, 
-                                                          decay=batch_norm_decay, 
-                                                          epsilon=batch_norm_epsilon, 
-                                                          init_zero=init_zero, 
-                                                          activation=None, 
+                projection_out = tfutils.model.batchnorm_corr(inputs=projection_out,
+                                                          is_training=is_training,
+                                                          decay=batch_norm_decay,
+                                                          epsilon=batch_norm_epsilon,
+                                                          init_zero=init_zero,
+                                                          activation=None,
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
                                                           bn_trainable=bn_trainable,
                                                           **crossdevice_bn_kwargs)
             except:
-                projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
-                                                          is_training=is_training, 
-                                                          decay=batch_norm_decay, 
-                                                          epsilon=batch_norm_epsilon, 
-                                                          init_zero=init_zero, 
-                                                          activation=None, 
+                projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out,
+                                                          is_training=is_training,
+                                                          decay=batch_norm_decay,
+                                                          epsilon=batch_norm_epsilon,
+                                                          init_zero=init_zero,
+                                                          activation=None,
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
                                                           bn_trainable=bn_trainable,
@@ -675,14 +675,14 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
                     inputs=projection_out,
                     G=num_groups,
                     data_format='channels_last',
-                    epsilon=batch_norm_epsilon) 
+                    epsilon=batch_norm_epsilon)
             except:
                 projection_out = tfutils.model_tool_old.groupnorm(
                     inputs=projection_out,
                     G=num_groups,
                     data_format='channels_last',
                     epsilon=batch_norm_epsilon)
-                 
+
         return tf.add(inp, projection_out)
     else: # shape mismatch in spatial dimension
         if sp_resize: # usually do this if strides are kept to 1 always
@@ -698,23 +698,23 @@ def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_
         projection_out = tf.nn.conv2d(res_inp, res_to_out_kernel, strides=strides, padding=padding)
         if batch_norm:
             try:
-                projection_out = tfutils.model.batchnorm_corr(inputs=projection_out, 
-                                                          is_training=is_training, 
-                                                          decay=batch_norm_decay, 
-                                                          epsilon=batch_norm_epsilon, 
-                                                          init_zero=init_zero, 
-                                                          activation=None, 
+                projection_out = tfutils.model.batchnorm_corr(inputs=projection_out,
+                                                          is_training=is_training,
+                                                          decay=batch_norm_decay,
+                                                          epsilon=batch_norm_epsilon,
+                                                          init_zero=init_zero,
+                                                          activation=None,
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
                                                           bn_trainable=bn_trainable,
                                                           **crossdevice_bn_kwargs)
             except:
-                projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out, 
-                                                          is_training=is_training, 
-                                                          decay=batch_norm_decay, 
-                                                          epsilon=batch_norm_epsilon, 
-                                                          init_zero=init_zero, 
-                                                          activation=None, 
+                projection_out = tfutils.model_tool_old.batchnorm_corr(inputs=projection_out,
+                                                          is_training=is_training,
+                                                          decay=batch_norm_decay,
+                                                          epsilon=batch_norm_epsilon,
+                                                          init_zero=init_zero,
+                                                          activation=None,
                                                           data_format='channels_last',
                                                           time_suffix=time_suffix,
                                                           bn_trainable=bn_trainable,
@@ -766,10 +766,10 @@ def component_conv(inp,
 
     """
     Function that breaks up the convolutional kernel to its basenet and non basenet components, when given
-the name of its feedforward input. This is useful when loading basenet weights into tnn when using a 
+the name of its feedforward input. This is useful when loading basenet weights into tnn when using a
 harbor channel op of concat. Other channel ops should work with tfutils.model.conv just fine.
     """
-    
+
     if time_sep:
         assert time_suffix is not None
 
@@ -834,23 +834,23 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
 
     if batch_norm:
         try:
-            output = tfutils.model.batchnorm_corr(inputs=output, 
-                                              is_training=is_training, 
-                                              data_format=data_format, 
-                                              decay = batch_norm_decay, 
-                                              epsilon = batch_norm_epsilon, 
-                                              init_zero=init_zero, 
+            output = tfutils.model.batchnorm_corr(inputs=output,
+                                              is_training=is_training,
+                                              data_format=data_format,
+                                              decay = batch_norm_decay,
+                                              epsilon = batch_norm_epsilon,
+                                              init_zero=init_zero,
                                               activation=activation,
                                               time_suffix=time_suffix,
                                               bn_trainable=bn_trainable,
                                               **crossdevice_bn_kwargs)
         except:
-            output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
-                                              is_training=is_training, 
-                                              data_format=data_format, 
-                                              decay = batch_norm_decay, 
-                                              epsilon = batch_norm_epsilon, 
-                                              init_zero=init_zero, 
+            output = tfutils.model_tool_old.batchnorm_corr(inputs=output,
+                                              is_training=is_training,
+                                              data_format=data_format,
+                                              decay = batch_norm_decay,
+                                              epsilon = batch_norm_epsilon,
+                                              init_zero=init_zero,
                                               activation=activation,
                                               time_suffix=time_suffix,
                                               bn_trainable=bn_trainable,
@@ -862,7 +862,7 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
                 G=num_groups,
                 data_format=data_format,
                 epsilon=batch_norm_epsilon,
-                weight_decay=weight_decay)      
+                weight_decay=weight_decay)
         except:
             output = tfutils.model_tool_old.groupnorm(
                 inputs=output,
@@ -939,31 +939,31 @@ def conv_bn(inp,
 
     if batch_norm:
         try:
-            output = tfutils.model.batchnorm_corr(inputs=output, 
-                                              is_training=is_training, 
-                                              data_format=data_format, 
-                                              decay = batch_norm_decay, 
-                                              epsilon = batch_norm_epsilon, 
-                                              init_zero=init_zero, 
+            output = tfutils.model.batchnorm_corr(inputs=output,
+                                              is_training=is_training,
+                                              data_format=data_format,
+                                              decay = batch_norm_decay,
+                                              epsilon = batch_norm_epsilon,
+                                              init_zero=init_zero,
                                               activation=activation,
                                               bn_trainable=bn_trainable,
                                               **crossdevice_bn_kwargs)
         except:
-            output = tfutils.model_tool_old.batchnorm_corr(inputs=output, 
-                                              is_training=is_training, 
-                                              data_format=data_format, 
-                                              decay = batch_norm_decay, 
-                                              epsilon = batch_norm_epsilon, 
-                                              init_zero=init_zero, 
+            output = tfutils.model_tool_old.batchnorm_corr(inputs=output,
+                                              is_training=is_training,
+                                              data_format=data_format,
+                                              decay = batch_norm_decay,
+                                              epsilon = batch_norm_epsilon,
+                                              init_zero=init_zero,
                                               activation=activation,
                                               bn_trainable=bn_trainable,
                                               **crossdevice_bn_kwargs)
-    
+
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
 
     return output
-    
+
 def spatial_fc(inp,
                out_depth,
                kernel_init='xavier',
@@ -974,18 +974,18 @@ def spatial_fc(inp,
                flatten=False,
                name='spatial_fc'
                ):
-    
+
     '''
-    Function that fully connects a spatial tensor of rank 4 to a flat tensor of rank 2. 
-    Whereas fc(inp) will flatten the input and perform an affine transformation, 
+    Function that fully connects a spatial tensor of rank 4 to a flat tensor of rank 2.
+    Whereas fc(inp) will flatten the input and perform an affine transformation,
     spatial_fc(inp) performs a conv op with kernel shape [H,W,D,out_depth].
     This allows for regularization that takes into account the spatial nature of the kernel.
 
     Args:
-    
+
     inp: a rank 4 tensor with shape [Batch, H, W, D]
     out_depth: number of channels in the downstream fc layer
-    reg_scales: dict with keys {weight_decay, l1, laplacian, group_sparsity} 
+    reg_scales: dict with keys {weight_decay, l1, laplacian, group_sparsity}
                 whose real scalar values multiply the respective regularizers. (weight_decay corresponds to L2.)
     kernel_init: in ['xavier', 'zeros', 'constant', etc.]
     kernel_init_kwargs: kwargs to pass to tfutils.model.initializer, e.g. 'value' for a constant init
@@ -996,7 +996,7 @@ def spatial_fc(inp,
 
     # spatial dimensions of input layer
     in_shape = inp.get_shape().as_list()[1:4]
-    
+
     # kernel
     try:
         init = tfutils.model.initializer(kernel_init, **kernel_init_kwargs)
@@ -1009,7 +1009,7 @@ def spatial_fc(inp,
                              dtype=tf.float32,
                              regularizer=reg_func,
                              name='weights')
-    
+
     try:
         init = tfutils.model.initializer(kind='constant', value=bias)
     except:
@@ -1022,14 +1022,14 @@ def spatial_fc(inp,
                              name='bias')
 
 
-    
+
     # ops
     # conv has full connectivity
     conv = tf.nn.conv2d(inp, kernel,
                         strides=[1,1,1,1],
                         padding='VALID')
     output = tf.nn.bias_add(conv, biases, name=name)
-    
+
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
     if flatten:
@@ -1056,19 +1056,19 @@ def factored_fc(inp,
                 name='factored_fc'):
 
     '''
-    Function that fully connects a spatial tensor of rank 4 to a flat tensor of rank 2. 
-    Whereas spatial_fc(inp) performs a conv op with kernel shape [H,W,D,out_depth], 
+    Function that fully connects a spatial tensor of rank 4 to a flat tensor of rank 2.
+    Whereas spatial_fc(inp) performs a conv op with kernel shape [H,W,D,out_depth],
     factored_fc(inp) performs a depth-separable conv over the H,W dimensions with a common spatial
     kernel, then takes inner product over the D dimension with a feature kernel.
     Regularizations may apply separately to the spatial mask M and the feature weights W.
     See [citation].
 
     Args:
-    
+
     inp: a rank 4 tensor with shape [Batch, H, W, D]
     out_depth: number of channels in the downstream fc layer, i.e. num_neurons to fit N
     ## TODO ##
-    reg_scales: dict with keys {weight_decay, l1, laplacian, group_sparsity} 
+    reg_scales: dict with keys {weight_decay, l1, laplacian, group_sparsity}
                 whose real scalar values multiply the respective regularizers. (weight_decay corresponds to L2.)
     spatial_mask_init, feature_kernel_init: in ['xavier', 'zeros', 'constant', etc.]
     spatial_mask_init_kwargs, feature_kernel_init_kwargs: kwargs to pass to tfutils.model.initializer, e.g. 'value' for a constant init
@@ -1087,7 +1087,7 @@ def factored_fc(inp,
     # spatial dimensions of input layer, H x W x D
     in_shape = inp.get_shape().as_list()[1:4]
 
-    # spatial mask conv kernel 
+    # spatial mask conv kernel
     try:
         init = tfutils.model.initializer(spatial_mask_init, **spatial_mask_init_kwargs)
     except:
@@ -1102,7 +1102,7 @@ def factored_fc(inp,
                              regularizer=reg_func,
                              name='weights_spatial')
     #print(spatial_kernel.name, spatial_kernel.get_shape().as_list())
-    
+
     # feature kernel
     try:
         init = tfutils.model.initializer(feature_kernel_init, **feature_kernel_init_kwargs)
@@ -1118,7 +1118,7 @@ def factored_fc(inp,
                              regularizer=reg_func,
                              name='weights_feature')
     #print(feature_kernel.name, feature_kernel.get_shape().as_list())
-    try:    
+    try:
         init = tfutils.model.initializer(kind='constant', value=bias)
     except:
         init = tfutils.model_tool_old.initializer(kind='constant', value=bias)
@@ -1129,7 +1129,7 @@ def factored_fc(inp,
                              name='bias')
 
 
-    
+
     # ops
     if dropout is not None:
         inp = tf.nn.dropout(inp, dropout, seed=dropout_seed, name='dropout')
@@ -1148,7 +1148,7 @@ def factored_fc(inp,
     if flatten:
         inp = tf.squeeze(inp, axis=[1, 2]) # do not want to accidentally squeeze N dimension if N = 1, else bias_add will throw error
     output = tf.nn.bias_add(inp, biases, name=name)
-    
+
     if activation is not None:
         output = getattr(tf.nn, activation)(output, name=activation)
 
@@ -1166,14 +1166,14 @@ def shared_spatial_mlp(inp,
     '''
     Applies same mlp to every every spatial feature
     '''
-    
+
     if kernel_initializer_kwargs is None:
         kernel_initializer_kwargs = {}
     try:
-        kernel_init = tfutils.model.initializer(kind=kernel_initializer, **kernel_initializer_kwargs)        
+        kernel_init = tfutils.model.initializer(kind=kernel_initializer, **kernel_initializer_kwargs)
     except:
         kernel_init = tfutils.model_tool_old.initializer(kind=kernel_initializer, **kernel_initializer_kwargs)
-    bias_init = tf.constant_initializer(value=bias)                    
+    bias_init = tf.constant_initializer(value=bias)
 
     if activation is None:
         activation = tf.identity
@@ -1192,7 +1192,7 @@ def shared_spatial_mlp(inp,
                                      shape=[dim_now, hidden_dim],
                                      dtype=tf.float32,
                                      name=("layer_"+str(i+1)+"_weights"))
-            
+
             biases = tf.get_variable(initializer=bias_init,
                                      shape=[hidden_dim],
                                      dtype=tf.float32,
@@ -1231,12 +1231,12 @@ def shared_xy_graph_conv(inp,
     B,H,W,C = inp.shape.as_list()
     S = stride
     try:
-        init = tfutils.model.initializer(kind='constant', value=bias)        
+        init = tfutils.model.initializer(kind='constant', value=bias)
         bias_init = tfutils.model.initializer(kind='constant', value=bias)
     except:
-        init = tfutils.model_tool_old.initializer(kind='constant', value=bias)                
+        init = tfutils.model_tool_old.initializer(kind='constant', value=bias)
         bias_init = tfutils.model_tool_old.initializer(kind='constant', value=bias)
-    
+
     # X,Y coordinate functions
     ones = tf.ones(shape=[1,H,W], dtype=tf.float32)
     hw_grid = scale * tf.stack([tf.reshape(tf.range(W, dtype=tf.float32), [1,1,W]) * ones,
@@ -1254,7 +1254,7 @@ def shared_xy_graph_conv(inp,
                                       dtype=tf.float32,
                                       initializer=bias_init
     )
-    
+
     xy_grid = tf.nn.depthwise_conv2d(hw_grid, coordinate_filter, strides=[1,S,S,1], padding='SAME', name='xy_linear')
     xy_grid += coordinate_bias # [1,H//S,W//S,2] where first channel are X, second are Y
 
@@ -1266,12 +1266,12 @@ def shared_xy_graph_conv(inp,
         dx, dzx = tf.split(tf.nn.conv2d(inp, xfilter, strides=[1,S,S,1], padding='SAME'), [1,1], axis=-1) # [B,H//S,W//S,2]
         dy, dzy = tf.split(tf.nn.conv2d(inp, yfilter, strides=[1,S,S,1], padding='SAME'), [1,1], axis=-1) # [B,H//S,W//S,2]
         dz = dzx + dzy
-        
+
         xy_grid += tf.concat([dx,dy], axis=3)
     else:
         xy_grid = tf.tile(xy_grid, [B,1,1,1])
         dz = tf.zeros([B,H//S,W//S,1], dtype=tf.float32)
-    
+
     # graph conv where nodes are the spatial features of the input
     if S > 1:
         downsample_kernel = tf.get_variable("downsample_kernel", shape=[S,S,C,1], dtype=tf.float32, initializer=init)
@@ -1285,7 +1285,7 @@ def shared_xy_graph_conv(inp,
                              **mlp_kwargs
     )
     out = tf.reshape(out, [B,H//S,W//S, num_out_attrs, node_multiplier])
-    
+
     # add coordinates to MLP outputs
     out += tf.expand_dims(tf.concat([xy_grid, dz, tf.zeros([B,H//S,W//S,num_out_attrs-3], dtype=tf.float32)], axis=3), -1) # [B,H,W,num_out_attrs,node_multiplier]
 
@@ -1301,7 +1301,7 @@ def drop_connect(inputs, is_training, drop_connect_rate):
         return inputs
 
     print("applying drop connect with rate %.2f" % drop_connect_rate)
-    
+
     # compute keep prob
     keep_prob = drop_connect_rate
 
@@ -1320,7 +1320,7 @@ def squeeze_and_excitation(inputs,
                            kernel_init_kwargs={'seed':0}):
     '''
     Squeeze and Excitation Layer
-    
+
     inputs: [B,H,W,C] conv2d tensor with channels last
     reduction_ratio: float in [0,1] to determine how much to squeeze channels
     activation: nonlinear function to apply after reduction conv
@@ -1336,7 +1336,7 @@ def squeeze_and_excitation(inputs,
 
     print("squeeze-excitation with %d to %d channels" % (C, rC))
     return tf.nn.sigmoid(se_tensor) * inputs
-    
+
 class GenFuncCell(RNNCell):
 
     def __init__(self,
@@ -1364,6 +1364,18 @@ class GenFuncCell(RNNCell):
         self.name_tmp = name
 
         self._reuse = None
+
+        if len(harbor_shape) == 4:
+            self._strides = self.pre_memory[0][1].get('strides', [1,1,1,1])[1:3]
+            self._shape = self.memory[1].get('shape', [self.harbor_shape[1] // self._strides[0], self.harbor_shape[2] // self._strides[1]])
+            idx = [i for i in range(len(self.pre_memory)) if 'out_depth' in self.pre_memory[i][1]][0]
+            if 'out_depth' not in self.memory[1]:
+                self.out_depth = self.pre_memory[idx][1]['out_depth']
+            self.state_shape = [self.harbor_shape[0]] + self._shape + [self.out_depth]
+        elif len(harbor_shape) == 2: # just an fc layer
+            self.state_shape = self.harbor_shape
+        else:
+            raise ValueError
 
         self.internal_time = 0
         self.max_internal_time = self.memory[1].get('max_internal_time', None)
@@ -1399,7 +1411,7 @@ class GenFuncCell(RNNCell):
             if inputs is None:
                 inputs = [self.input_init[0](shape=self.harbor_shape,
                                              **self.input_init[1])]
-                
+
             output = self.harbor[0](inputs, self.harbor_shape, self.name_tmp, reuse=self._reuse, **self.harbor[1])
 
             res_input = None
@@ -1414,7 +1426,7 @@ class GenFuncCell(RNNCell):
                         if kwargs.get('return_input', False):
                             output, res_input = function(output, inputs, **kwargs) # component_conv needs to know the inputs
                         else:
-                            output = function(output, inputs, **kwargs) # component_conv needs to know the inputs                            
+                            output = function(output, inputs, **kwargs) # component_conv needs to know the inputs
                     else:
                         output = function(output, **kwargs)
 
