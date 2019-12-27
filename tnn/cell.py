@@ -1365,17 +1365,17 @@ class GenFuncCell(RNNCell):
 
         self._reuse = None
 
-        if len(harbor_shape) == 4:
+        fc_layers = [i for i in range(len(self.pre_memory)) if ((self.pre_memory[i][0]).__name__ == 'fc')]
+        if len(fc_layers) == 0:
             self._strides = self.pre_memory[0][1].get('strides', [1,1,1,1])[1:3]
             self._shape = self.memory[1].get('shape', [self.harbor_shape[1] // self._strides[0], self.harbor_shape[2] // self._strides[1]])
             idx = [i for i in range(len(self.pre_memory)) if 'out_depth' in self.pre_memory[i][1]][0]
             if 'out_depth' not in self.memory[1]:
                 self.out_depth = self.pre_memory[idx][1]['out_depth']
             self.state_shape = [self.harbor_shape[0]] + self._shape + [self.out_depth]
-        elif len(harbor_shape) == 2: # just an fc layer
-            self.state_shape = self.harbor_shape
-        else:
-            raise ValueError
+        else: # just an fc layer
+            self.out_depth = self.pre_memory[fc_layers[-1]][1]['out_depth']
+            self.state_shape = [self.harbor_shape[0], self.out_depth]
 
         self.internal_time = 0
         self.max_internal_time = self.memory[1].get('max_internal_time', None)
