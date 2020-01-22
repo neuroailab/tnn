@@ -188,7 +188,8 @@ def input_aggregator(inputs, shape, spatial_op, channel_op, kernel_init='xavier'
 
                 outputs.append(out)
             else:
-                raise ValueError
+                outputs.append(inp)
+                # raise ValueError("inp must have len(shape) in [2,4] but inp is %s" % inp)
 
         elif len(shape) == 4:
             pat = re.compile(':|/')
@@ -613,7 +614,10 @@ def memory(inp, state, memory_decay=0, trainable=False, name='memory'):
                           dtype=tf.float32,
                           trainable=trainable,
                           name='memory_decay')
-    state = tf.add(state * mem, inp, name=name)
+    if memory_decay == 0 and (not trainable):
+        state = inp
+    else:
+        state = tf.add(state * mem, inp, name=name)
     return state
 
 def residual_add(inp, res_inp, dtype=tf.float32, drop_connect_rate=None, kernel_init='xavier', kernel_init_kwargs=None, strides=[1,1,1,1], 
