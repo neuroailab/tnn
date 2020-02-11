@@ -840,7 +840,17 @@ harbor channel op of concat. Other channel ops should work with tfutils.model.co
             
 
     if activation is not None:
-        output = getattr(tf.nn, activation)(output, name=activation)
+        if activation == 'relu':
+            output = tf.nn.relu(output)
+        elif activation == 'elu':
+            output = tf.nn.elu(output)
+        elif activation == 'swish':
+            output = tf.nn.swish(output)
+        elif activation == 'sigmoid':
+            output = tf.nn.sigmoid(output)
+        else:
+            raise NotImplementedError("activation is %s" % activation)
+        # output = getattr(tf.nn, activation)(output, name=activation)
 
     if return_input:
         return output, inp
