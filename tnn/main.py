@@ -163,8 +163,13 @@ def init_nodes(G, input_nodes, batch_size=256, channel_op='concat', to_exclude=N
                 if not isinstance(exclude_preds, list):
                     exclude_preds = [exclude_preds]
             pred_shapes = [G.node[pred]['output_shape'] for pred in G.predecessors(node) if pred not in exclude_preds]
-            attr['kwargs']['harbor_shape'] = harbor_policy(pred_shapes,
-                                                           attr['kwargs']['harbor_shape'], channel_op=channel_op)
+            try:
+                attr['kwargs']['harbor_shape'] = harbor_policy(pred_shapes,
+                                                               attr['kwargs']['harbor_shape'], channel_op=channel_op)
+            except KeyError:
+                print("error node", node)
+                import pdb
+                pdb.set_trace()
 
         attr['cell'] = attr['cell'](**attr['kwargs'])
 
