@@ -15,7 +15,7 @@ pip install -e tnn
 
 Look at `tutorials`. `tutorials/alexnet_example.py` demonstrates the basic unrolling API with AlexNet. `tutorials/customcell_example.py` shows how to pass a custom cell to a model, and add edges. 
 
-`tnn/convrnn.py` contains examples of standard ConvRNN cells in the literature. `tnn/resnetrnn.py` contains the Reciprocal Gated Cell implementation (see https://arxiv.org/abs/1807.00053 for details). 
+`tnn/convrnn.py` contains examples of standard ConvRNN cells in the literature. `tnn/resnetrnn.py` contains the Reciprocal Gated Cell implementation (see https://arxiv.org/abs/1807.00053 for details). `tnn/efficientgaternn.py` contains the Efficient Gated Unit cell implementation used in https://arxiv.org/abs/2006.12373.
 
 `json` contains a set of example graphs including 5 layer LSTM and Reciprocal Gated models. To use them with the `customcell_example.py`, set the global variables `MODEL_JSON = 5L_imnet128_lstm345` and `CUSTOM_CELL = tnn_ConvLSTMCell`. You will also need to set the INPUT_LAYER and READOUT_LAYER to match the model JSON.
 
