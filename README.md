@@ -5,7 +5,7 @@ Run models in time.
 # Installation
 
 ```
-git clone https:/github.com/dicarlolab/tnn
+git clone https:/github.com/neuroailab/tnn
 pip install -e tnn
 ```
 
