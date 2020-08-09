@@ -152,7 +152,7 @@ def init_nodes(G, input_nodes, batch_size=256, channel_op='concat', to_exclude=N
                     if isinstance(output, dict):
                         G.node[node]['output_shape'] = output['spatial'].shape.as_list()
                     else:
-                        G.node[node]['output_shape'] = output.shape.as_list()                    
+                        G.node[node]['output_shape'] = output.shape.as_list()
 
     # now correct harbor sizes to the final sizes and initialize cells
     for node, attr in G.nodes(data=True):
@@ -291,7 +291,7 @@ def topological_sort(G, ff_order, paths, node_attr):
                         is_pred = False
                         is_succ = False
                         for idx, existing_n in enumerate(s):
-                            # find first node that n is a predecessor of 
+                            # find first node that n is a predecessor of
                             if n in G.predecessors(existing_n):
                                 s.insert(idx, n)
                                 is_pred = True
@@ -319,11 +319,11 @@ def topological_sort(G, ff_order, paths, node_attr):
     # assert all nodes in ordering
     assert(set(s) == set(node_attr.keys()))
     return s
-    
+
 def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
     """
     Unrolls a TensorFlow graph in time, but differs from the unroll() in that
-    a full feedforward pass occurs at each timestep (as in the default 
+    a full feedforward pass occurs at each timestep (as in the default
     Tensorflow RNN unroller)
 
     Given a NetworkX DiGraph, connects states and outputs over time for `ntimes`
@@ -370,7 +370,7 @@ def unroll_tf(G, input_seq, ntimes=None, ff_order=None):
         attr['outputs'] = []
         attr['states'] = []
         node_attr[node] = attr
-    
+
     s = topological_sort(G, ff_order=ff_order, paths=paths, node_attr=node_attr)
 
     for t in range(ntimes):  # Loop over time

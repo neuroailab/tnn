@@ -21,7 +21,7 @@ class ConvRNNCell(object):
         self.shape = shape
         self._out_depth = out_depth
         self.scope = scope
-    
+
     def __call__(self, inputs, state=None, fb_input=None, res_input=None, **training_kwargs):
         """Run this RNN cell on inputs, starting from the given state.
         """
@@ -53,9 +53,9 @@ class ConvRNNCell(object):
         return None
         # shape = self.shape
         # out_depth = self._out_depth
-        # zeros = tf.zeros([batch_size, shape[0], shape[1], out_depth], dtype=dtype) 
+        # zeros = tf.zeros([batch_size, shape[0], shape[1], out_depth], dtype=dtype)
         # return zeros
-    
+
 class EfficientGateCell(ConvRNNCell):
     """
     """
@@ -86,7 +86,7 @@ class EfficientGateCell(ConvRNNCell):
                  residual_add=False,
                  res_cell=False
     ):
-        """ 
+        """
         Initialize the memory function of the EfficientGateCell.
 
         """
@@ -124,7 +124,7 @@ class EfficientGateCell(ConvRNNCell):
             'batch_norm_gamma_init': batch_norm_gamma_init
         }
         self.conv_kwargs = {
-            'strides': self.strides,            
+            'strides': self.strides,
             'kernel_init': kernel_initializer,
             'kernel_init_kwargs': kernel_initializer_kwargs,
             'weight_decay': weight_decay,
@@ -132,7 +132,7 @@ class EfficientGateCell(ConvRNNCell):
             'padding': 'SAME',
             'use_bias': False
         }
-        
+
     def zero_state(self, batch_size, dtype):
         """
         Return zero-filled state tensor(s)
@@ -151,12 +151,12 @@ class EfficientGateCell(ConvRNNCell):
         # def _conv_op(x):
         #     return depth_conv(x, **kwargs) if depthwise \
         #         else conv(x, out_depth, **kwargs)
-        
+
         with tf.variable_scope(scope):
             inputs = depth_conv(inputs, **kwargs) if depthwise else conv(inputs, out_depth, **kwargs)
 
         return inputs
-    
+
     def __call__(self, inputs, state, fb_input, res_input, is_training=True, **training_kwargs):
 
         """
@@ -165,8 +165,8 @@ class EfficientGateCell(ConvRNNCell):
         self.bn_kwargs['is_training'] = is_training
         self.bn_kwargs.update({'time_suffix': training_kwargs.get('time_suffix', None),
                                'time_sep': training_kwargs.get('time_sep', True)}) # time suffix
-        self.res_depth = res_input.shape.as_list()[-1] if res_input is not None else self.out_depth        
-        
+        self.res_depth = res_input.shape.as_list()[-1] if res_input is not None else self.out_depth
+
         # get previous state
         prev_cell, prev_state = tf.split(value=state, num_or_size_splits=[self.cell_depth, self.in_depth], axis=3, name="state_split")
 
@@ -174,7 +174,7 @@ class EfficientGateCell(ConvRNNCell):
         with tf.variable_scope(type(self).__name__): # "EfficientGateCell"
 
             update = tf.zeros_like(inputs)
-            
+
             # combine fb input with ff input
             if fb_input is not None: # if there's an input and feedback_filter_size != 0
                 update += self._conv_bn(fb_input, self.feedback_filter_size, out_depth=self.in_depth, depthwise=False, activation=True, scope="feedback_to_state")
@@ -193,7 +193,7 @@ class EfficientGateCell(ConvRNNCell):
                 next_cell = res_input
             else:
                 next_cell = prev_cell
-            
+
             # depthwise conv on expanded state, then squeeze-excitation, channel reduction, residual add
             inp = next_state if not self.bypass_state else (inputs + prev_state)
             next_out = self._se(inp, self._se_ratio * self.res_depth)
@@ -211,10 +211,10 @@ class EfficientGateCell(ConvRNNCell):
 
             # concat back on the cell
             next_state = tf.concat([next_cell, next_state], axis=3, name="cell_concat_next_state")
-            
+
             return next_out, next_state
-                
-class tnn_EfficientGateCell(ConvRNNCell):
+
+class tnn_EfficientGateCell(EfficientGateCell):
 
     def __init__(self,
                  harbor_shape,
@@ -250,7 +250,7 @@ class tnn_EfficientGateCell(ConvRNNCell):
             'dropout_rate': self.memory[1].get('dropout_rate', 0),
             'drop_connect_rate': self.memory[1].get('drop_connect_rate', 0)
         }
-        
+
         ### Memory includes both a typical ConvRNN cell (optional) and an IntegratedGraphCell (optional) ###
         self.convrnn_cell_kwargs = self.memory[1].get('convrnn_cell_kwargs', {})
         idx = [i for i in range(len(self.pre_memory)) if 'out_depth' in self.pre_memory[i][1]]
@@ -263,6 +263,8 @@ class tnn_EfficientGateCell(ConvRNNCell):
                 self.convrnn_cell_kwargs['in_depth'] = self.pre_memory_out_depth # the expansion width
             if 'out_depth' not in self.convrnn_cell_kwargs:
                 self.convrnn_cell_kwargs['out_depth'] = self.harbor_shape[-1] # channels coming out of harbor
+            if 'shape' not in self.convrnn_cell_kwargs:
+                self.convrnn_cell_kwargs['shape'] = self.harbor_shape[1:3]
             self.convrnn_cell = EfficientGateCell(**self.convrnn_cell_kwargs)
         else:
             self.convrnn_cell_kwargs['out_depth'] = self.pre_memory_out_depth
@@ -270,11 +272,11 @@ class tnn_EfficientGateCell(ConvRNNCell):
                                             out_depth=self.convrnn_cell_kwargs['out_depth'],
                                             scope="0")
 
-        # not used in this cell 
+        # not used in this cell
         self.graph_cell = ConvRNNCell(shape=self.convrnn_cell_kwargs.get('shape', None),
                                       out_depth=self.convrnn_cell_kwargs['out_depth'],
                                       scope="1")
-        
+
     def __call__(self, inputs=None, state=None):
 
         with tf.variable_scope(self.name_tmp, reuse=self._reuse):
@@ -284,7 +286,7 @@ class tnn_EfficientGateCell(ConvRNNCell):
                 inputs = [self.input_init[0](shape=self.harbor_shape, **self.input_init[1])]
 
             # Pass inputs through harbor
-            fb_input = None            
+            fb_input = None
             if self.memory[1].get('convrnn_cell', None) in ["EfficientGateCell"]:
                 if len(inputs) == 1:
                     ff_idx = 0
@@ -325,7 +327,7 @@ class tnn_EfficientGateCell(ConvRNNCell):
 
                     else:
                        output = function(output, **kwargs)
-                    # output = tf.Print(output, [tf.shape(output), output.name.split('/')[-1], tf.reduce_max(output)], message="output of %s" % tf.get_variable_scope().name)                                                                                                            
+                    # output = tf.Print(output, [tf.shape(output), output.name.split('/')[-1], tf.reduce_max(output)], message="output of %s" % tf.get_variable_scope().name)
                 pre_name_counter += 1
 
 
@@ -340,11 +342,13 @@ class tnn_EfficientGateCell(ConvRNNCell):
             # resize fb if there was a strided convolution, for instance
             ff_size = output.shape.as_list()[1:3]
             if fb_input is not None:
-                if fb_size != ff_size: 
+                if fb_size != ff_size:
                     fb_input = tf.image.resize_images(fb_input, size=ff_size)
 
-            self.training_kwargs['time_suffix'] = curr_time_suffix                    
+            self.training_kwargs['time_suffix'] = curr_time_suffix
             output, convrnn_cell_state = self.convrnn_cell(output, state['convrnn_cell_state'], fb_input=fb_input, res_input=res_input, is_training=self.is_training, **self.training_kwargs)
+            # self.next_state['convrnn_cell_state'] = convrnn_cell_state
+            self.next_state['convrnn_cell_output'] = tf.identity(output, 'convrnn_cell_output')
             self.next_state['convrnn_cell_state'] = convrnn_cell_state
 
             # graph cell is not used here currently
@@ -355,14 +359,14 @@ class tnn_EfficientGateCell(ConvRNNCell):
 
             output, graph_cell_state = self.graph_cell(output, state['graph_cell_state'])
             self.next_state['graph_cell_state'] = graph_cell_state
-            
+
             # post memory functions (e.g. more convs, pooling)
             post_name_counter = 0
             for function, kwargs in self.post_memory:
                 with tf.variable_scope("post_" + str(post_name_counter), reuse=self._reuse):
                     if kwargs.get('time_sep', False):
                         kwargs['time_suffix'] = curr_time_suffix # for scoping unshared BN
-                    
+
                     if function.__name__ == "component_conv":
                         output = function(output, inputs, **kwargs)
                     elif function.__name__ == "residual_add":
@@ -374,8 +378,219 @@ class tnn_EfficientGateCell(ConvRNNCell):
             # layer output
             self.output_tmp = tf.identity(tf.cast(output, self.dtype_tmp), name='output')
             self._reuse = True
-            
+
         if (self.max_internal_time is None) or ((self.max_internal_time is not None) and (self.internal_time < self.max_internal_time)):
             self.internal_time += 1
         return self.output_tmp, self.next_state
-    
+
+
+def _conv(inp,
+         out_depth,
+         ksize=[3,3],
+         strides=[1,1,1,1],
+         data_format='channels_last',
+         padding='SAME',
+         kernel_init='xavier',
+         kernel_init_kwargs=None,
+         use_bias=True,
+         bias=0,
+         weight_decay=None,
+         activation='relu',
+         batch_norm=False,
+         group_norm=False,
+         num_groups=32,
+         is_training=False,
+         batch_norm_decay=0.9,
+         batch_norm_epsilon=1e-5,
+         batch_norm_gamma_init=None,
+         init_zero=None,
+         dropout=None,
+         dropout_seed=0,
+         time_sep=False,
+         time_suffix=None,
+         name='conv'
+         ):
+
+    # assert out_shape is not None
+
+    if time_sep:
+        assert time_suffix is not None
+
+    if batch_norm or group_norm:
+        use_bias = False
+
+    if weight_decay is None:
+        weight_decay = 0.
+    if isinstance(ksize, int):
+        ksize = [ksize, ksize]
+    if isinstance(strides, int):
+        strides = [1, strides, strides, 1]
+    if kernel_init_kwargs is None:
+        kernel_init_kwargs = {}
+    in_depth = inp.get_shape().as_list()[-1]
+    if out_depth is None:
+        out_depth = in_depth
+
+    # weights
+    init = initializer(kernel_init, **kernel_init_kwargs)
+    kernel = tf.get_variable(initializer=init,
+                            shape=[ksize[0], ksize[1], in_depth, out_depth],
+                            dtype=tf.float32,
+                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                            name='weights')
+
+    if use_bias:
+        init = initializer(kind='constant', value=bias)
+        biases = tf.get_variable(initializer=init,
+                            shape=[out_depth],
+                            dtype=tf.float32,
+                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                            name='bias')
+    # ops
+    if dropout is not None: # dropout is not the dropout_rate, not the keep_porb
+        inp = tf.nn.dropout(inp, keep_prob=(1.0-dropout), seed=dropout_seed, name='dropout')
+
+    conv = tf.nn.conv2d(inp, kernel,
+                        strides=strides,
+                        padding=padding)
+
+    if use_bias:
+        output = tf.nn.bias_add(conv, biases, name=name)
+    else:
+        output = tf.identity(conv, name=name)
+
+    if batch_norm:
+        output = batchnorm_corr(inputs=output,
+                                is_training=is_training,
+                                data_format=data_format,
+                                decay = batch_norm_decay,
+                                epsilon = batch_norm_epsilon,
+                                constant_init=batch_norm_gamma_init,
+                                init_zero=init_zero,
+                                activation=activation,
+                                time_suffix=time_suffix)
+    elif group_norm:
+        output = groupnorm(inputs=output,
+                           G=num_groups,
+                           data_format=data_format,
+                           weight_decay=weight_decay,
+                           gamma_init=(0.0 if init_zero else 1.0),
+                           epsilon=batch_norm_epsilon)
+
+
+    # if activation is not None:
+    #     output = getattr(tf.nn, activation)(output, name=activation)
+
+    if activation is not None:
+        if activation == 'relu':
+            output = tf.nn.relu(output)
+        elif activation == 'elu':
+            output = tf.nn.elu(output)
+        elif activation == 'swish':
+            output = tf.nn.swish(output)
+        elif activation == 'sigmoid':
+            output = tf.nn.sigmoid(output)
+        else:
+            raise NotImplementedError("activation is %s" % activation)
+
+    return output
+
+def _depth_conv(inp,
+               multiplier=1,
+               out_depth=None,
+               ksize=3,
+               strides=1,
+             padding='SAME',
+             kernel_init='xavier',
+             kernel_init_kwargs=None,
+             activation='relu6',
+             weight_decay=None,
+             batch_norm = False,
+               group_norm=False,
+               num_groups=32,
+               use_bias=False,
+             is_training=True,
+             batch_norm_decay=0.9,
+             batch_norm_epsilon=1e-5,
+               batch_norm_gamma_init=None,
+             init_zero=None,
+             data_format='channels_last',
+             time_sep=False,
+             time_suffix=None,
+             name='depth_conv'
+             ):
+
+    # assert out_shape is not None
+
+    if time_sep:
+        assert time_suffix is not None
+
+    if weight_decay is None:
+        weight_decay = 0.
+    if isinstance(ksize, int):
+        ksize = [ksize, ksize]
+    if isinstance(strides, int):
+        strides = [1, strides, strides, 1]
+
+    if kernel_init_kwargs is None:
+        kernel_init_kwargs = {}
+
+    in_depth = inp.get_shape().as_list()[-1]
+
+    out_depth = multiplier * in_depth
+
+    # weights
+    init = initializer(kernel_init, **kernel_init_kwargs)
+    kernel = tf.get_variable(initializer=init,
+                            shape=[ksize[0], ksize[1], in_depth, multiplier],
+                            dtype=tf.float32,
+                            regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                            name='weights')
+
+    output = tf.nn.depthwise_conv2d(inp, kernel,
+                            strides=strides,
+                            padding=padding)
+
+    if batch_norm:
+        output = batchnorm_corr(inputs=output,
+                                is_training=is_training,
+                                data_format=data_format,
+                                decay = batch_norm_decay,
+                                epsilon = batch_norm_epsilon,
+                                constant_init=batch_norm_gamma_init,
+                                init_zero=init_zero,
+                                activation=activation,
+                                time_suffix=time_suffix)
+    elif group_norm:
+        output = groupnorm(inputs=output,
+                           G=num_groups,
+                           data_format=data_format,
+                           weight_decay=weight_decay,
+                           gamma_init=(0.0 if init_zero else 1.0),
+                           epsilon=batch_norm_epsilon)
+
+    elif use_bias:
+        init = initializer(kind='constant', value=1.0)
+        biases = tf.get_variable(initializer=init,
+                                shape=[out_depth],
+                                dtype=tf.float32,
+                                regularizer=tf.contrib.layers.l2_regularizer(weight_decay),
+                                name='bias')
+        output = tf.nn.bias_add(output, biases, name=name)
+
+    # if activation is not None:
+    #     output = getattr(tf.nn, activation)(output, name=activation)
+
+    if activation is not None:
+        if activation == 'relu':
+            output = tf.nn.relu(output)
+        elif activation == 'elu':
+            output = tf.nn.elu(output)
+        elif activation == 'swish':
+            output = tf.nn.swish(output)
+        elif activation == 'sigmoid':
+            output = tf.nn.sigmoid(output)
+        else:
+            raise NotImplementedError("activation is %s" % activation)
+
+    return output
