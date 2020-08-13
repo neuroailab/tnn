@@ -139,6 +139,9 @@ class EfficientGateCell(ConvRNNCell):
         """
         return tf.zeros([batch_size, self.shape[0], self.shape[1], self.cell_depth + self.in_depth], dtype=dtype)
 
+    def zero_output(self, batch_size, dtype):
+
+        return tf.zeros([batch_size, self.shape[0], self.shape[1], self.out_depth], dtype=dtype)
 
     def _conv_bn(self, inputs, ksize, scope, out_depth=None, depthwise=False, activation=True):
         if out_depth is None:
@@ -161,6 +164,7 @@ class EfficientGateCell(ConvRNNCell):
 
         """
         """
+
         # update training-specific kwargs
         self.bn_kwargs['is_training'] = is_training
         self.bn_kwargs.update({'time_suffix': training_kwargs.get('time_suffix', None),
@@ -337,7 +341,9 @@ class tnn_EfficientGateCell(EfficientGateCell):
             if state is None or state.get('convrnn_cell_state', None) is None:
                 batch_size = output.shape.as_list()[0]
                 convrnn_cell_state = self.convrnn_cell.zero_state(batch_size, dtype=self.dtype_tmp)
-                state = {'convrnn_cell_state': convrnn_cell_state}
+                state = {
+                    'convrnn_cell_state': convrnn_cell_state
+                }
 
             # resize fb if there was a strided convolution, for instance
             ff_size = output.shape.as_list()[1:3]
