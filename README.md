@@ -11,6 +11,8 @@ pip install -e tnn
 
 *(`-e` installs a developer version such that you can always update your code to the latest)*
 
+Note: `networkx==1.11` is the latest version of the `networkx` package that works with this package (higher versions of `networkx` will not work).
+
 # Usage
 
 Look at `tutorials`. `tutorials/alexnet_example.py` demonstrates the basic unrolling API with AlexNet. `tutorials/customcell_example.py` shows how to pass a custom cell to a model, and add edges. 
