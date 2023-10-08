@@ -1,3 +1,5 @@
+# Deprecated as of March 11, 2022! Use https://github.com/neuroailab/convrnns instead (includes pretrained models).
+
 # Temporal Neural Networks
 
 Run models in time.
